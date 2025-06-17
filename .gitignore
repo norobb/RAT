@@ -1,1 +1,4 @@
 client.exe
+build
+dist
+client.spec
