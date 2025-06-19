@@ -1,3 +1,5 @@
 uvicorn
 websockets
 fastapi
+pynput
+requests
