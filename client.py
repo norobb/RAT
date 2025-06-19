@@ -9,7 +9,7 @@ import platform
 import sqlite3
 import shutil
 import sys
-from datetime import datetime, timedelta  # KORRIGIERTE ZEILE
+from datetime import datetime, timedelta
 
 # pynput wird für den Keylogger benötigt
 try:
