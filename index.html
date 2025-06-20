@@ -183,8 +183,9 @@
 
       function createClientListItem(client) {
         const li = document.createElement("li");
-        li.textContent = `ID: ${client.id} (${client.address[0]})`;
-        li.dataset.clientId = client.id; // KORRIGIERT: camelCase
+        li.textContent = `${client.hostname || "Unbekannt"} (${client.ip || client.address[0]})`;
+        li.dataset.clientId = client.id;
+        li.title = `Hostname: ${client.hostname || "?"}\nOS: ${client.os || "?"}\nIP: ${client.ip || client.address[0]}`;
         if (client.id === selectedClientId) {
           li.classList.add("selected");
         }
@@ -194,7 +195,7 @@
             .querySelectorAll("#client-list li")
             .forEach((el) => el.classList.remove("selected"));
           li.classList.add("selected");
-          log(`Client ${selectedClientId} ausgewählt.`, "cmd");
+          log(`Client ${client.hostname || client.id} ausgewählt.`, "cmd");
         });
         return li;
       }
@@ -286,14 +287,19 @@
             renderClientList(data.clients);
             break;
           case "client_connected":
-            log(`Neuer Client verbunden: ID ${data.client.id}`);
-            const newClientLi = createClientListItem(data.client); // KORRIGIERT
+            log(
+              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || data.client.address[0]})`
+            );
+            const newClientLi = createClientListItem(data.client);
             clientList.appendChild(newClientLi);
             break;
           case "client_disconnected":
-            log(`Client ${data.client_id} hat die Verbindung getrennt.`, "error");
+            log(
+              `Client ${data.client_id} hat die Verbindung getrennt.`,
+              "error"
+            );
             const liToRemove = clientList.querySelector(
-              `li[data-client-id='${data.client_id}']` // KORRIGIERT
+              `li[data-client-id='${data.client_id}']`
             );
             if (liToRemove) liToRemove.remove();
             if (selectedClientId === data.client_id) selectedClientId = null;
@@ -310,6 +316,12 @@
             img.style.maxWidth = "100%";
             img.style.marginTop = "10px";
             img.style.border = "1px solid #555";
+            img.style.cursor = "pointer";
+            img.title = "Klicken zum Vergrößern";
+            img.onclick = () => {
+              const w = window.open();
+              w.document.write(`<img src="${img.src}" style="width:100%">`);
+            };
             output.appendChild(img);
             output.scrollTop = output.scrollHeight;
             break;

