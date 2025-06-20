@@ -154,6 +154,8 @@
         <button class="quick-btn" id="btn-upload" title="Datei hochladen">Upload</button>
         <button class="quick-btn" id="btn-shutdown" title="Herunterfahren">Shutdown</button>
         <button class="quick-btn" id="btn-restart" title="Neustart">Restart</button>
+        <button class="quick-btn" id="btn-screenstream-start" title="Live-Screen starten">Screenstream Start</button>
+        <button class="quick-btn" id="btn-screenstream-stop" title="Live-Screen stoppen">Screenstream Stop</button>
         <input type="file" id="upload-input" />
       </div>
     </div>
@@ -170,6 +172,8 @@
       const btnUpload = document.getElementById("btn-upload");
       const btnShutdown = document.getElementById("btn-shutdown");
       const btnRestart = document.getElementById("btn-restart");
+      const btnScreenStart = document.getElementById("btn-screenstream-start");
+      const btnScreenStop = document.getElementById("btn-screenstream-stop");
 
       let selectedClientId = null;
 
@@ -378,47 +382,47 @@
         };
         reader.readAsArrayBuffer(file);
       };
-    </script>
-  
-    <div class="panel">
-      <h2>Live Screen</h2>
-      <img id="screen" style="max-width:100%; border:1px solid #444;" tabindex="0">
-    </div>
-    <script>
-    let selectedClient = null;
-    const screenImg = document.getElementById('screen');
-    const wsUI = ws; // existing ws variable
-    function setSelectedClient(id) {
-      selectedClient = id;
-    }
-    // Assume existing code sets selected client via UI, integrate accordingly.
-    wsUI.addEventListener('message', event => {
-      const msg = JSON.parse(event.data);
-      if (msg.action === 'screen_frame' && msg.client_id === selectedClient) {
-        screenImg.src = 'data:image/jpeg;base64,' + msg.data;
+
+      let selectedClient = null;
+      const screenImg = document.getElementById('screen');
+      const screenStatus = document.getElementById('screen-status');
+
+      function setSelectedClient(id) {
+        selectedClient = id;
+        screenImg.src = '';
+        screenStatus.textContent = '';
       }
-    });
-    // Mouse events
-    screenImg.addEventListener('mousemove', e => {
-      if (!selectedClient) return;
-      const rect = screenImg.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      wsUI.send(JSON.stringify({action:'control',client_id:selectedClient,type:'mouse_move',x:x,y:y}));
-    });
-    screenImg.addEventListener('click', e => {
-      if (!selectedClient) return;
-      const rect = screenImg.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      wsUI.send(JSON.stringify({action:'control',client_id:selectedClient,type:'mouse_click',x:x,y:y,button:'left'}));
-    });
-    // Keyboard
-    screenImg.addEventListener('keydown', e => {
-      if (!selectedClient) return;
-      wsUI.send(JSON.stringify({action:'control',client_id:selectedClient,type:'key_press',key:e.key}));
-    });
+      // Set selectedClient on client selection
+      clientList.addEventListener('click', e => {
+        const li = e.target.closest('li[data-client-id]');
+        if (li) setSelectedClient(Number(li.dataset.clientId));
+      });
+
+      ws.addEventListener('message', event => {
+        const msg = JSON.parse(event.data);
+        if (msg.action === 'screen_frame' && msg.client_id === selectedClient) {
+          screenImg.src = 'data:image/jpeg;base64,' + msg.data;
+          screenStatus.textContent = 'Livebild empfangen';
+        }
+      });
+
+      btnScreenStart.onclick = () => {
+        if (!selectedClient) {
+          screenStatus.textContent = 'Kein Client ausgewählt!';
+          return;
+        }
+        ws.send(JSON.stringify({action:'screenstream_start',client_id:selectedClient}));
+        screenStatus.textContent = 'Live-Screen wird angefordert...';
+      };
+      btnScreenStop.onclick = () => {
+        if (!selectedClient) {
+          screenStatus.textContent = 'Kein Client ausgewählt!';
+          return;
+        }
+        ws.send(JSON.stringify({action:'screenstream_stop',client_id:selectedClient}));
+        screenStatus.textContent = 'Live-Screen gestoppt.';
+        screenImg.src = '';
+      };
     </script>
-    
-</body>
+  </body>
 </html>

