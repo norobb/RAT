@@ -174,9 +174,13 @@
       const btnRestart = document.getElementById("btn-restart");
       const btnScreenStart = document.getElementById("btn-screenstream-start");
       const btnScreenStop = document.getElementById("btn-screenstream-stop");
+      const screenImg = document.getElementById('screen');
+      const screenStatus = document.getElementById('screen-status');
 
       let selectedClientId = null;
+      let selectedClient = null;
 
+      // --- UI Hilfsfunktionen ---
       function log(message, type = "info") {
         const entry = document.createElement("div");
         entry.className = `log-entry log-${type}`;
@@ -185,6 +189,16 @@
         output.scrollTop = output.scrollHeight;
       }
 
+      function triggerDownload(filename, base64Data) {
+        const link = document.createElement("a");
+        link.href = `data:application/octet-stream;base64,${base64Data}`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      // --- Client-Listenfunktionen ---
       function createClientListItem(client) {
         const li = document.createElement("li");
         li.textContent = `${client.hostname || "Unbekannt"} (${client.ip || client.address[0]})`;
@@ -193,14 +207,7 @@
         if (client.id === selectedClientId) {
           li.classList.add("selected");
         }
-        li.addEventListener("click", () => {
-          selectedClientId = client.id;
-          document
-            .querySelectorAll("#client-list li")
-            .forEach((el) => el.classList.remove("selected"));
-          li.classList.add("selected");
-          log(`Client ${client.hostname || client.id} ausgewählt.`, "cmd");
-        });
+        li.addEventListener("click", () => selectClient(client.id, client));
         return li;
       }
 
@@ -212,6 +219,18 @@
         });
       }
 
+      function selectClient(id, clientObj) {
+        selectedClientId = id;
+        selectedClient = id;
+        document.querySelectorAll("#client-list li").forEach((el) => el.classList.remove("selected"));
+        const li = clientList.querySelector(`li[data-client-id='${id}']`);
+        if (li) li.classList.add("selected");
+        log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
+        screenImg.src = '';
+        screenStatus.textContent = '';
+      }
+
+      // --- Befehl senden ---
       function sendCommand(customPayload = null) {
         if (!selectedClientId) {
           log("Fehler: Kein Client ausgewählt.", "error");
@@ -269,78 +288,7 @@
         commandInput.value = "";
       }
 
-      function triggerDownload(filename, base64Data) {
-        const link = document.createElement("a");
-        link.href = `data:application/octet-stream;base64,${base64Data}`;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-
-      ws.onopen = () => log("Verbunden mit dem Control Server.");
-      ws.onclose = () => log("Verbindung zum Control Server verloren.", "error");
-      ws.onerror = (err) => log(`WebSocket Fehler: ${err}`, "error");
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log("Empfangen:", data); // DEBUG
-
-        switch (data.type) {
-          case "client_list":
-            renderClientList(data.clients);
-            break;
-          case "client_connected":
-            log(
-              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || data.client.address[0]})`
-            );
-            const newClientLi = createClientListItem(data.client);
-            clientList.appendChild(newClientLi);
-            break;
-          case "client_disconnected":
-            log(
-              `Client ${data.client_id} hat die Verbindung getrennt.`,
-              "error"
-            );
-            const liToRemove = clientList.querySelector(
-              `li[data-client-id='${data.client_id}']`
-            );
-            if (liToRemove) liToRemove.remove();
-            if (selectedClientId === data.client_id) selectedClientId = null;
-            break;
-          case "command_output":
-            log(
-              `[Client ${data.client_id || selectedClientId}] Ausgabe:\n${data.output}`
-            );
-            break;
-          case "screenshot":
-            log(`[Client ${data.client_id}] Screenshot empfangen.`);
-            const img = document.createElement("img");
-            img.src = `data:image/png;base64,${data.data}`;
-            img.style.maxWidth = "100%";
-            img.style.marginTop = "10px";
-            img.style.border = "1px solid #555";
-            img.style.cursor = "pointer";
-            img.title = "Klicken zum Vergrößern";
-            img.onclick = () => {
-              const w = window.open();
-              w.document.write(`<img src="${img.src}" style="width:100%">`);
-            };
-            output.appendChild(img);
-            output.scrollTop = output.scrollHeight;
-            break;
-          case "file_download":
-            log(
-              `[Client ${data.client_id}] Datei '${data.filename}' empfangen. Download wird gestartet.`
-            );
-            triggerDownload(data.filename, data.data);
-            break;
-          case "error":
-            log(`[Server/Client Fehler] ${data.message || data.error}`, "error");
-            break;
-        }
-      };
-
+      // --- Event-Handler ---
       sendButton.addEventListener("click", sendCommand);
       commandInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") sendCommand();
@@ -383,29 +331,6 @@
         reader.readAsArrayBuffer(file);
       };
 
-      let selectedClient = null;
-      const screenImg = document.getElementById('screen');
-      const screenStatus = document.getElementById('screen-status');
-
-      function setSelectedClient(id) {
-        selectedClient = id;
-        screenImg.src = '';
-        screenStatus.textContent = '';
-      }
-      // Set selectedClient on client selection
-      clientList.addEventListener('click', e => {
-        const li = e.target.closest('li[data-client-id]');
-        if (li) setSelectedClient(Number(li.dataset.clientId));
-      });
-
-      ws.addEventListener('message', event => {
-        const msg = JSON.parse(event.data);
-        if (msg.action === 'screen_frame' && msg.client_id === selectedClient) {
-          screenImg.src = 'data:image/jpeg;base64,' + msg.data;
-          screenStatus.textContent = 'Livebild empfangen';
-        }
-      });
-
       btnScreenStart.onclick = () => {
         if (!selectedClient) {
           screenStatus.textContent = 'Kein Client ausgewählt!';
@@ -422,6 +347,73 @@
         ws.send(JSON.stringify({action:'screenstream_stop',client_id:selectedClient}));
         screenStatus.textContent = 'Live-Screen gestoppt.';
         screenImg.src = '';
+      };
+
+      // --- WebSocket Events ---
+      ws.onopen = () => log("Verbunden mit dem Control Server.");
+      ws.onclose = () => log("Verbindung zum Control Server verloren.", "error");
+      ws.onerror = (err) => log(`WebSocket Fehler: ${err}`, "error");
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        switch (data.type) {
+          case "client_list":
+            renderClientList(data.clients);
+            break;
+          case "client_connected":
+            log(
+              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || data.client.address[0]})`
+            );
+            renderClientList([...clientList.querySelectorAll('li')].map(li => ({
+              id: Number(li.dataset.clientId)
+            })).concat([data.client]));
+            break;
+          case "client_disconnected":
+            log(
+              `Client ${data.client_id} hat die Verbindung getrennt.`,
+              "error"
+            );
+            renderClientList([...clientList.querySelectorAll('li')].filter(li => Number(li.dataset.clientId) !== data.client_id).map(li => ({
+              id: Number(li.dataset.clientId)
+            })));
+            if (selectedClientId === data.client_id) selectedClientId = null;
+            break;
+          case "command_output":
+            log(
+              `[Client ${data.client_id || selectedClientId}] Ausgabe:\n${data.output}`
+            );
+            break;
+          case "screenshot":
+            log(`[Client ${data.client_id}] Screenshot empfangen.`);
+            const img = document.createElement("img");
+            img.src = `data:image/png;base64,${data.data}`;
+            img.style.maxWidth = "100%";
+            img.style.marginTop = "10px";
+            img.style.border = "1px solid #555";
+            img.style.cursor = "pointer";
+            img.title = "Klicken zum Vergrößern";
+            img.onclick = () => {
+              const w = window.open();
+              w.document.write(`<img src="${img.src}" style="width:100%">`);
+            };
+            output.appendChild(img);
+            output.scrollTop = output.scrollHeight;
+            break;
+          case "file_download":
+            log(
+              `[Client ${data.client_id}] Datei '${data.filename}' empfangen. Download wird gestartet.`
+            );
+            triggerDownload(data.filename, data.data);
+            break;
+          case "error":
+            log(`[Server/Client Fehler] ${data.message || data.error}`, "error");
+            break;
+        }
+        // Live-Screen-Frame
+        if (data.action === 'screen_frame' && data.client_id === selectedClient) {
+          screenImg.src = 'data:image/jpeg;base64,' + data.data;
+          screenStatus.textContent = 'Livebild empfangen';
+        }
       };
     </script>
   </body>
