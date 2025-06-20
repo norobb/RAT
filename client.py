@@ -319,25 +319,38 @@ class ScreenStreamer:
             self._task.cancel()
             try:
                 await self._task
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 pass
             self._task = None
 
     async def _stream(self, ws):
+        import asyncio
+        import mss
+        from PIL import Image
+        import io
+        import base64
         sct = mss.mss()
         monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-        while self._running:
-            img = sct.grab(monitor)
-            im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
-            buf = io.BytesIO()
-            im.save(buf, format='JPEG', quality=50)
-            img_bytes = buf.getvalue()
-            b64 = base64.b64encode(img_bytes).decode('utf-8')
-            try:
-                await ws.send(json.dumps({'action':'screen_frame','data':b64}))
-            except Exception:
-                break
-            await asyncio.sleep(0.5)
+        try:
+            while self._running:
+                img = sct.grab(monitor)
+                im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
+                buf = io.BytesIO()
+                im.save(buf, format='JPEG', quality=50)
+                img_bytes = buf.getvalue()
+                b64 = base64.b64encode(img_bytes).decode('utf-8')
+                try:
+                    await ws.send(json.dumps({'action':'screen_frame','data':b64}))
+                except Exception:
+                    break
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            # Task wurde absichtlich abgebrochen, kein Fehler anzeigen
+            pass
+        except Exception:
+            pass
 
 screen_streamer = ScreenStreamer()
 
