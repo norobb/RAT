@@ -3,121 +3,184 @@
   <head>
     <meta charset="UTF-8" />
     <title>RAT Control Panel from J&N</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+      html, body {
+        height: 100%;
+      }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        background-color: #121212;
-        color: #e0e0e0;
+        min-height: 100vh;
         margin: 0;
-        padding: 20px;
+        padding: 0;
+        background: linear-gradient(135deg, #232526 0%, #414345 100%);
+        color: #e0e0e0;
+        font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         display: flex;
-        height: calc(100vh - 40px);
-        gap: 20px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+      }
+      .container {
+        display: flex;
+        flex-direction: row;
+        gap: 32px;
+        margin: 40px 0 0 0;
+        width: 95vw;
+        max-width: 1600px;
       }
       .panel {
-        background-color: #1e1e1e;
-        border-radius: 8px;
-        padding: 20px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        background: #23272f;
+        border-radius: 18px;
+        box-shadow: 0 8px 32px 0 rgba(31,38,135,0.25);
+        padding: 28px 24px;
+        min-width: 320px;
+        max-width: 420px;
+        flex: 1 1 350px;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 24px;
       }
       #client-panel {
-        width: 250px;
-        display: flex;
-        flex-direction: column;
+        max-width: 340px;
+        min-width: 220px;
+        flex: 0 0 260px;
       }
       #main-panel {
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
+        flex: 2 1 600px;
+        min-width: 400px;
+        max-width: 900px;
       }
       h2 {
         margin-top: 0;
-        border-bottom: 1px solid #333;
-        padding-bottom: 10px;
+        margin-bottom: 18px;
+        font-weight: 600;
+        font-size: 1.3em;
+        letter-spacing: 0.03em;
+        color: #8ecae6;
+        border-bottom: 1px solid #2c2f36;
+        padding-bottom: 8px;
       }
       #client-list {
-        list-style-type: none;
+        list-style: none;
         padding: 0;
+        margin: 0;
         flex-grow: 1;
+        overflow-y: auto;
+        max-height: 60vh;
       }
       #client-list li {
-        padding: 10px;
-        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 10px;
+        border-radius: 8px;
         cursor: pointer;
-        margin-bottom: 5px;
+        margin-bottom: 7px;
         border: 1px solid transparent;
+        background: #23272f;
+        transition: background 0.15s, border 0.15s;
+        font-size: 1.05em;
       }
-      #client-list li:hover {
-        background-color: #333;
+      #client-list li.selected, #client-list li:hover {
+        background: #2b3140;
+        border-color: #8ecae6;
       }
-      #client-list li.selected {
-        background-color: #0d47a1;
-        border-color: #42a5f5;
-        font-weight: bold;
+      .client-status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #43d17a;
+        margin-right: 4px;
+        box-shadow: 0 0 4px #43d17a88;
       }
       #output {
         flex-grow: 1;
-        background-color: #000;
-        border: 1px solid #333;
-        border-radius: 5px;
-        padding: 10px;
-        font-family: "Courier New", Courier, monospace;
+        background: #181a20;
+        border: 1px solid #23272f;
+        border-radius: 8px;
+        padding: 12px;
+        font-family: "Fira Mono", "Consolas", "Courier New", monospace;
         white-space: pre-wrap;
-        word-wrap: break-word;
+        word-break: break-word;
         overflow-y: auto;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
+        min-height: 120px;
+        max-height: 260px;
+        font-size: 1.01em;
       }
       #controls {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
+        margin-bottom: 10px;
       }
-      .quick-btn {
-        background-color: #263238;
+      .quick-btn, button {
+        background: linear-gradient(90deg, #3a506b 0%, #5bc0be 100%);
         color: #fff;
-        border: 1px solid #333;
-        padding: 8px 12px;
-        border-radius: 5px;
-        margin-right: 5px;
-        font-size: 0.95em;
+        border: none;
+        padding: 9px 16px;
+        border-radius: 7px;
+        font-size: 1em;
+        font-weight: 500;
+        cursor: pointer;
+        margin-right: 4px;
+        box-shadow: 0 2px 8px #0002;
+        transition: background 0.18s, box-shadow 0.18s;
       }
-      .quick-btn:hover {
-        background-color: #37474f;
+      .quick-btn:hover, button:hover {
+        background: linear-gradient(90deg, #5bc0be 0%, #3a506b 100%);
+        box-shadow: 0 4px 16px #0003;
       }
       input[type="text"] {
         flex-grow: 1;
-        background-color: #333;
-        border: 1px solid #555;
+        background: #23272f;
+        border: 1px solid #2c2f36;
         color: #e0e0e0;
-        padding: 10px;
-        border-radius: 5px;
+        padding: 11px;
+        border-radius: 7px;
+        font-size: 1em;
+        outline: none;
+        transition: border 0.15s;
       }
-      button {
-        background-color: #0d47a1;
-        color: white;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 5px;
-        cursor: pointer;
+      input[type="text"]:focus {
+        border-color: #8ecae6;
       }
-      button:hover {
-        background-color: #1565c0;
+      #upload-input {
+        display: none;
       }
       .log-entry {
         padding: 2px 0;
       }
-      .log-info {
-        color: #4caf50;
+      .log-info { color: #43d17a; }
+      .log-error { color: #f44336; }
+      .log-cmd { color: #8ecae6; }
+      /* --- Live Screen --- */
+      #screen-canvas {
+        display: block;
+        margin: 0 auto;
+        background: #181818;
+        border-radius: 10px;
+        box-shadow: 0 2px 12px #0003;
+        border: 1px solid #23272f;
+        max-width: 100%;
+        max-height: 60vh;
+        transition: box-shadow 0.18s;
       }
-      .log-error {
-        color: #f44336;
+      #screen-status {
+        margin-top: 7px;
+        color: #b9bbbe;
+        font-size: 1em;
+        text-align: center;
+        letter-spacing: 0.01em;
       }
-      .log-cmd {
-        color: #2196f3;
+      @media (max-width: 1100px) {
+        .container { flex-direction: column; align-items: stretch; }
+        #main-panel { max-width: 100%; }
       }
-      #upload-input {
-        display: none;
+      @media (max-width: 700px) {
+        .container { flex-direction: column; gap: 10px; margin: 10px 0 0 0; }
+        .panel { padding: 12px 6px; min-width: unset; }
+        #main-panel { min-width: unset; }
       }
       /* --- Discord-Style Command Suggestion --- */
       #command-suggest {
@@ -167,33 +230,38 @@
     </style>
   </head>
   <body>
-    <div id="client-panel" class="panel">
-      <h2>Clients</h2>
-      <ul id="client-list"></ul>
-    </div>
-
-    <div id="main-panel" class="panel">
-      <div id="output"></div>
-      <div id="controls" style="position:relative;">
-        <input
-          type="text"
-          id="command-input"
-          placeholder="Befehle: exec, screenshot, download, history, keylogger, ls, systeminfo"
-          autocomplete="off"
-        />
-        <div id="command-suggest"></div>
-        <button id="send-button">Senden</button>
-        <button class="quick-btn" id="btn-systeminfo" title="Systeminfo">Systeminfo</button>
-        <button class="quick-btn" id="btn-ls" title="Verzeichnis auflisten">ls</button>
-        <button class="quick-btn" id="btn-upload" title="Datei hochladen">Upload</button>
-        <button class="quick-btn" id="btn-shutdown" title="Herunterfahren">Shutdown</button>
-        <button class="quick-btn" id="btn-restart" title="Neustart">Restart</button>
-        <button class="quick-btn" id="btn-screenstream-start" title="Live-Screen starten">Screenstream Start</button>
-        <button class="quick-btn" id="btn-screenstream-stop" title="Live-Screen stoppen">Screenstream Stop</button>
-        <input type="file" id="upload-input" />
+    <div class="container">
+      <div id="client-panel" class="panel">
+        <h2>Clients</h2>
+        <ul id="client-list"></ul>
+      </div>
+      <div id="main-panel" class="panel">
+        <div id="output"></div>
+        <div id="controls" style="position:relative;">
+          <input
+            type="text"
+            id="command-input"
+            placeholder="Befehle: /exec, /screenshot, /download, /history, /keylogger, /ls, /systeminfo"
+            autocomplete="off"
+          />
+          <div id="command-suggest"></div>
+          <button id="send-button">Senden</button>
+          <button class="quick-btn" id="btn-systeminfo" title="Systeminfo">Systeminfo</button>
+          <button class="quick-btn" id="btn-ls" title="Verzeichnis auflisten">ls</button>
+          <button class="quick-btn" id="btn-upload" title="Datei hochladen">Upload</button>
+          <button class="quick-btn" id="btn-shutdown" title="Herunterfahren">Shutdown</button>
+          <button class="quick-btn" id="btn-restart" title="Neustart">Restart</button>
+          <button class="quick-btn" id="btn-screenstream-start" title="Live-Screen starten">Screenstream Start</button>
+          <button class="quick-btn" id="btn-screenstream-stop" title="Live-Screen stoppen">Screenstream Stop</button>
+          <input type="file" id="upload-input" />
+        </div>
+        <div class="panel" style="background:#23272f;box-shadow:none;margin:0;padding:18px 8px 8px 8px;">
+          <h2 style="margin-bottom:10px;">Live Screen</h2>
+          <canvas id="screen-canvas" tabindex="0"></canvas>
+          <div id="screen-status"></div>
+        </div>
       </div>
     </div>
-
     <script>
       const ws = new WebSocket(`wss://${window.location.host}/ws`);
       const clientList = document.getElementById("client-list");
@@ -208,7 +276,7 @@
       const btnRestart = document.getElementById("btn-restart");
       const btnScreenStart = document.getElementById("btn-screenstream-start");
       const btnScreenStop = document.getElementById("btn-screenstream-stop");
-      const screenImg = document.getElementById('screen');
+      const screenCanvas = document.getElementById('screen-canvas');
       const screenStatus = document.getElementById('screen-status');
 
       let selectedClientId = null;
@@ -235,12 +303,12 @@
       // --- Client-Listenfunktionen ---
       function createClientListItem(client) {
         const li = document.createElement("li");
-        li.textContent = `${client.hostname || "Unbekannt"} (${client.ip || client.address[0]})`;
+        li.innerHTML = `<span class="client-status-dot"></span>
+          <span>${client.hostname || "Unbekannt"}</span>
+          <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>`;
         li.dataset.clientId = client.id;
         li.title = `Hostname: ${client.hostname || "?"}\nOS: ${client.os || "?"}\nIP: ${client.ip || client.address[0]}`;
-        if (client.id === selectedClientId) {
-          li.classList.add("selected");
-        }
+        if (client.id === selectedClientId) li.classList.add("selected");
         li.addEventListener("click", () => selectClient(client.id, client));
         return li;
       }
@@ -260,7 +328,7 @@
         const li = clientList.querySelector(`li[data-client-id='${id}']`);
         if (li) li.classList.add("selected");
         log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
-        screenImg.src = '';
+        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
         screenStatus.textContent = '';
       }
 
@@ -522,7 +590,7 @@
         }
         ws.send(JSON.stringify({action:'screenstream_stop',client_id:selectedClient}));
         screenStatus.textContent = 'Live-Screen gestoppt.';
-        screenImg.src = '';
+        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
       };
 
       // --- WebSocket Events ---
@@ -587,10 +655,48 @@
         }
         // Live-Screen-Frame
         if (data.action === 'screen_frame' && data.client_id === selectedClient) {
-          screenImg.src = 'data:image/jpeg;base64,' + data.data;
-          screenStatus.textContent = 'Livebild empfangen';
+          if (data.img_bytes && data.width && data.height) {
+            drawScreenFrame(data.img_bytes, data.width, data.height);
+          }
         }
       };
+
+      // Modernisierte Client-Liste
+      function createClientListItem(client) {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="client-status-dot"></span>
+          <span>${client.hostname || "Unbekannt"}</span>
+          <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>`;
+        li.dataset.clientId = client.id;
+        li.title = `Hostname: ${client.hostname || "?"}\nOS: ${client.os || "?"}\nIP: ${client.ip || client.address[0]}`;
+        if (client.id === selectedClientId) li.classList.add("selected");
+        li.addEventListener("click", () => selectClient(client.id, client));
+        return li;
+      }
+
+      // Live Screenstream mit Canvas
+      const screenCanvas = document.getElementById('screen-canvas');
+      const screenStatus = document.getElementById('screen-status');
+      let lastScreenTime = 0, lastScreenFps = 0;
+
+      function drawScreenFrame(imgBytes, width, height) {
+        const ctx = screenCanvas.getContext('2d');
+        const img = new window.Image();
+        img.onload = function() {
+          screenCanvas.width = width;
+          screenCanvas.height = height;
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          // FPS berechnen
+          const now = performance.now();
+          if (lastScreenTime) {
+            lastScreenFps = Math.round(1000 / (now - lastScreenTime));
+          }
+          lastScreenTime = now;
+          screenStatus.textContent = `Livebild (${width}x${height}) – FPS: ${lastScreenFps}`;
+        };
+        img.src = "data:image/jpeg;base64," + imgBytes;
+      }
     </script>
   </body>
 </html>

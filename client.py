@@ -306,6 +306,7 @@ class ScreenStreamer:
     def __init__(self):
         self._task = None
         self._running = False
+        self._fps = 10  # Ziel-FPS für Streaming
 
     async def start(self, ws):
         if self._running:
@@ -330,24 +331,33 @@ class ScreenStreamer:
         import mss
         from PIL import Image
         import io
-        import base64
+
         sct = mss.mss()
         monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+        max_width, max_height = 1280, 720
         try:
             while self._running:
                 img = sct.grab(monitor)
                 im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
+                # Adaptive Resize
+                if img.width > max_width or img.height > max_height:
+                    im.thumbnail((max_width, max_height), Image.LANCZOS)
                 buf = io.BytesIO()
-                im.save(buf, format='JPEG', quality=50)
+                im.save(buf, format='JPEG', quality=80, optimize=True)
                 img_bytes = buf.getvalue()
-                b64 = base64.b64encode(img_bytes).decode('utf-8')
+                # Sende Metadaten als JSON-Textframe
+                meta = json.dumps({
+                    'action': 'screen_frame',
+                    'width': im.width,
+                    'height': im.height
+                })
                 try:
-                    await ws.send(json.dumps({'action':'screen_frame','data':b64}))
+                    await ws.send(meta)
+                    await ws.send(img_bytes)
                 except Exception:
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1 / self._fps)
         except asyncio.CancelledError:
-            # Task wurde absichtlich abgebrochen, kein Fehler anzeigen
             pass
         except Exception:
             pass
@@ -359,6 +369,9 @@ async def process_commands(websocket):
     while True:
         try:
             message = await websocket.recv()
+            # Prüfe ob binär oder textuell
+            if isinstance(message, bytes):
+                continue  # ignore unexpected binary
             command = json.loads(message)
             action = command.get("action")
             response = {"status": "ok"}
