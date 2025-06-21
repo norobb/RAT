@@ -310,7 +310,9 @@ class ScreenStreamer:
 
     async def start(self, ws):
         if self._running:
+            print("[ScreenStreamer] Bereits aktiv.")
             return
+        print("[ScreenStreamer] Starte Streaming.")
         self._running = True
         self._task = asyncio.create_task(self._stream(ws))
 
@@ -321,10 +323,11 @@ class ScreenStreamer:
             try:
                 await self._task
             except asyncio.CancelledError:
-                pass
-            except Exception:
-                pass
+                print("[ScreenStreamer] Task abgebrochen.")
+            except Exception as e:
+                print(f"[ScreenStreamer] Fehler beim Stoppen: {e}")
             self._task = None
+        print("[ScreenStreamer] Gestoppt.")
 
     async def _stream(self, ws):
         import asyncio
@@ -345,7 +348,6 @@ class ScreenStreamer:
                 buf = io.BytesIO()
                 im.save(buf, format='JPEG', quality=80, optimize=True)
                 img_bytes = buf.getvalue()
-                # Sende Metadaten als JSON-Textframe
                 meta = json.dumps({
                     'action': 'screen_frame',
                     'width': im.width,
@@ -354,13 +356,15 @@ class ScreenStreamer:
                 try:
                     await ws.send(meta)
                     await ws.send(img_bytes)
-                except Exception:
+                    print(f"[ScreenStreamer] Frame gesendet ({im.width}x{im.height}, {len(img_bytes)//1024}KB)")
+                except Exception as e:
+                    print(f"[ScreenStreamer] Fehler beim Senden: {e}")
                     break
                 await asyncio.sleep(1 / self._fps)
         except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
+            print("[ScreenStreamer] Stream-Task abgebrochen.")
+        except Exception as e:
+            print(f"[ScreenStreamer] Fehler: {e}")
 
 screen_streamer = ScreenStreamer()
 
@@ -369,7 +373,6 @@ async def process_commands(websocket):
     while True:
         try:
             message = await websocket.recv()
-            # Prüfe ob binär oder textuell
             if isinstance(message, bytes):
                 continue  # ignore unexpected binary
             command = json.loads(message)
@@ -378,12 +381,14 @@ async def process_commands(websocket):
 
             # --- Screen Streaming Steuerung ---
             if action == "screenstream_start":
+                print("[Client] Screenstream Start angefordert.")
                 await screen_streamer.start(websocket)
                 response["type"] = "command_output"
                 response["output"] = "Screen-Streaming gestartet."
                 await websocket.send(json.dumps(response))
                 continue
             elif action == "screenstream_stop":
+                print("[Client] Screenstream Stop angefordert.")
                 await screen_streamer.stop()
                 response["type"] = "command_output"
                 response["output"] = "Screen-Streaming gestoppt."
@@ -480,11 +485,12 @@ async def process_commands(websocket):
             
             await websocket.send(json.dumps(response))
         except Exception as e:
+            print(f"[Client] Fehler im Command-Handler: {e}")
             error_response = {"status": "error", "error": f"Client-Fehler: {e}"}
             try:
                 await websocket.send(json.dumps(error_response))
-            except Exception:
-                pass
+            except Exception as e2:
+                print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
 
 async def connect_to_server():
     ensure_persistence()
