@@ -778,6 +778,11 @@
       screenZoom.onchange();
     };
 
+    // --- Fix: Ensure commandInput is defined before use ---
+    const commandInput = document.getElementById("command-input");
+    const sendButton = document.getElementById("send-button");
+    const uploadInput = document.getElementById("upload-input");
+
     // --- Event-Handler ---
     sendButton.addEventListener("click", sendCommand);
     commandInput.addEventListener("keydown", (e) => {
