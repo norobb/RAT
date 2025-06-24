@@ -809,6 +809,23 @@
       }
     };
 
+    // --- Draw Live Screen Frame ---
+    function drawScreenFrame(imgBase64, width, height) {
+      const ctx = screenCanvas.getContext('2d');
+      const img = new window.Image();
+      img.onload = function () {
+        // Resize canvas to match frame
+        screenCanvas.width = img.width;
+        screenCanvas.height = img.height;
+        ctx.clearRect(0, 0, img.width, img.height);
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        screenStatus.textContent = `Live-Screen: ${img.width}x${img.height}`;
+      };
+      img.onerror = function () {
+        screenStatus.textContent = "Fehler beim Anzeigen des Live-Screens.";
+      };
+      img.src = "data:image/jpeg;base64," + imgBase64;
+    }
     // --- EVENT-HANDLER ---
     sendButton.addEventListener("click", sendCommand);
     commandInput.addEventListener("keydown", (e) => {

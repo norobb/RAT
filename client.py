@@ -354,13 +354,15 @@ class ScreenStreamer:
                 buf = io.BytesIO()
                 im.save(buf, format='JPEG', quality=80, optimize=True)
                 img_bytes = buf.getvalue()
-                meta = json.dumps({
+                meta = {
                     'action': 'screen_frame',
                     'width': im.width,
                     'height': im.height
-                })
+                }
                 try:
-                    await ws.send(meta)
+                    # Sende zuerst das Metaobjekt als JSON-Text
+                    await ws.send(json.dumps(meta))
+                    # Dann das Bild als Binärdaten
                     await ws.send(img_bytes)
                     print(f"[ScreenStreamer] Frame gesendet ({im.width}x{im.height}, {len(img_bytes)//1024}KB)")
                 except Exception as e:
