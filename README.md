@@ -34,5 +34,6 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 - Dokumentation und weitere Hinweise folgen.
 
 ## Website
-
-norobb.github.io/rat
+```
+norobb.github.io/RAT
+```
