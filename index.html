@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>RAT Control Panel from J&N</title>
+  <title>RAT Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
@@ -431,11 +431,11 @@
       li.innerHTML = `<span class="client-status-dot"></span>
         ${osIcon(client.os)}
         <span>${client.hostname || "Unbekannt"}</span>
-        <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || client.address[0]}</span>
+        <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || (client.address ? client.address[0] : "")}</span>
         <span class="client-tooltip">
           <b>Hostname:</b> ${client.hostname || "?"}<br>
           <b>OS:</b> ${client.os || "?"}<br>
-          <b>IP:</b> ${client.ip || client.address[0]}
+          <b>IP:</b> ${client.ip || (client.address ? client.address[0] : "")}
         </span>`;
       li.dataset.clientId = client.id;
       if (client.id === selectedClientId) li.classList.add("selected");
@@ -456,8 +456,10 @@
       const li = clientList.querySelector(`li[data-client-id='${id}']`);
       if (li) li.classList.add("selected");
       log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
-      screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-      screenStatus.textContent = '';
+      if (screenCanvas && screenCanvas.getContext) {
+        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+      }
+      if (screenStatus) screenStatus.textContent = '';
     }
 
     // --- LOGGING ---
@@ -736,22 +738,19 @@
         switch (data.type) {
           case "client_list":
             renderClientList(data.clients);
-            // --- Fix: select first client automatically if none selected ---
             if (!selectedClientId && data.clients.length > 0) {
               selectClient(data.clients[0].id, data.clients[0]);
             }
             break;
           case "client_connected":
             log(
-              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || data.client.address[0]})`
+              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || (data.client.address ? data.client.address[0] : "")})`
             );
-            // --- Fix: always update client list with all known clients ---
             if (Array.isArray(data.clients)) {
               renderClientList(data.clients);
             } else if (data.client) {
               renderClientList([data.client]);
             }
-            // --- Fix: select first client if none selected ---
             if (!selectedClientId && data.client) {
               selectClient(data.client.id, data.client);
             }
