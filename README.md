@@ -32,3 +32,7 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 
 - Nur für legale und ethische Zwecke verwenden!
 - Dokumentation und weitere Hinweise folgen.
+
+## Website
+
+norobb.github.io/rat
