@@ -65,6 +65,10 @@ jobs:
         with:
           path: artifacts
 
+      - name: List downloaded artifacts
+        run: |
+          find artifacts
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -80,8 +84,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/client-windows/client-windows.exe
-            artifacts/client-linux/client-linux
-            artifacts/client-macos/client-macos
+            artifacts/client-windows.exe
+            artifacts/client-linux
+            artifacts/client-macos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
