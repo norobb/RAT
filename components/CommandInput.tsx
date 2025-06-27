@@ -49,7 +49,7 @@ export default function CommandInput({
 	useEffect(() => {
 		setShowSuggestions(input.startsWith("/") && filteredCommands.length > 0);
 		setSelectedIndex(0);
-	}, [input]);
+	}, [input, filteredCommands.length]);
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -74,17 +74,18 @@ export default function CommandInput({
 			} else if (e.key === "ArrowUp") {
 				setSelectedIndex((i) => Math.max(i - 1, 0));
 				e.preventDefault();
-			} else if (e.key === "Tab" || e.key === "Enter") {
-				if (filteredCommands[selectedIndex]) {
+			} else if (e.key === "Tab") {
+				if (filteredCommands.length > 0 && filteredCommands[selectedIndex]) {
 					const cmd = "/" + filteredCommands[selectedIndex].name + " ";
 					setInput(cmd);
 					onChange?.(cmd);
 					setShowSuggestions(false);
-					if (e.key === "Enter" && onCommandSubmit) {
-						onCommandSubmit(cmd);
-					}
 					e.preventDefault();
 				}
+			} else if (e.key === "Enter") {
+				const cmd = input;
+				onCommandSubmit?.(cmd);
+				e.preventDefault();
 			} else if (e.key === "Escape") {
 				setShowSuggestions(false);
 			}
@@ -106,7 +107,10 @@ export default function CommandInput({
 				onChange={handleInputChange}
 				onKeyDown={handleKeyDown}
 				placeholder="Nachricht senden oder / für Befehle"
-				style={{ width: "100%" }}
+				style={{
+					width: "100%",
+					outline: showSuggestions ? "2px solid #5865f2" : "none",
+				}}
 				aria-autocomplete="list"
 				aria-controls="command-suggestion-list"
 				aria-activedescendant={
@@ -145,8 +149,7 @@ export default function CommandInput({
 							aria-selected={idx === selectedIndex}
 							style={{
 								padding: "8px 16px",
-								background:
-									idx === selectedIndex ? "#5865f2" : "transparent",
+								background: idx === selectedIndex ? "#5865f2" : "transparent",
 								cursor: "pointer",
 								display: "flex",
 								alignItems: "center",
@@ -157,24 +160,14 @@ export default function CommandInput({
 								setInput(cmdStr);
 								onChange?.(cmdStr);
 								setShowSuggestions(false);
+								setSelectedIndex(0);
 								inputRef.current?.focus();
 							}}
 							onMouseEnter={() => setSelectedIndex(idx)}
 						>
+							<span style={{ fontWeight: 600, minWidth: 110 }}>{"/" + cmd.name}</span>
 							<span
-								style={{
-									fontWeight: 600,
-									minWidth: 110,
-								}}
-							>
-								{"/" + cmd.name}
-							</span>
-							<span
-								style={{
-									color: "#b9bbbe",
-									marginLeft: 10,
-									fontSize: "0.97em",
-								}}
+								style={{ color: "#b9bbbe", marginLeft: 10, fontSize: "0.97em" }}
 							>
 								{cmd.description}
 							</span>
@@ -184,5 +177,4 @@ export default function CommandInput({
 			)}
 		</div>
 	);
-}
 }
