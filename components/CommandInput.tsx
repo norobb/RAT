@@ -49,7 +49,7 @@ export default function CommandInput({
 	useEffect(() => {
 		setShowSuggestions(input.startsWith("/") && filteredCommands.length > 0);
 		setSelectedIndex(0);
-	}, [input, filteredCommands.length]);
+	}, [input]);
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -105,7 +105,6 @@ export default function CommandInput({
 				value={input}
 				onChange={handleInputChange}
 				onKeyDown={handleKeyDown}
-				onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
 				placeholder="Nachricht senden oder / für Befehle"
 				style={{ width: "100%" }}
 				aria-autocomplete="list"
@@ -185,4 +184,5 @@ export default function CommandInput({
 			)}
 		</div>
 	);
+}
 }
