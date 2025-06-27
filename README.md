@@ -32,3 +32,9 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 
 - Nur für legale und ethische Zwecke verwenden!
 - Dokumentation und weitere Hinweise folgen.
+
+## Release
+
+- Release für passendes OS herunterladen
+- Doppelklick
+- Fertig, Datei installiert

