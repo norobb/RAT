@@ -69,6 +69,13 @@ jobs:
         run: |
           find artifacts
 
+      - name: Move artifacts to root
+        run: |
+          mv artifacts/client-windows/client-windows.exe artifacts/client-windows.exe || true
+          mv artifacts/client-linux/client-linux artifacts/client-linux || true
+          mv artifacts/client-macos/client-macos artifacts/client-macos || true
+        shell: bash
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
