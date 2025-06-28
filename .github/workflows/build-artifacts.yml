@@ -1,0 +1,71 @@
+name: Build Artifacts on Commit
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          pyinstaller --noconsole --onefile client.py
+        shell: bash
+
+      - name: Rename artifact
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            mv dist/client.exe client-windows.exe
+          elif [ "$RUNNER_OS" == "Linux" ]; then
+            mv dist/client client-linux
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            mv dist/client client-macos
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ runner.os }}
+          path: |
+            client-*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: build-artifacts
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: build-artifacts
+
+      - name: Commit and push artifacts
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Update build artifacts [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:build-artifacts
