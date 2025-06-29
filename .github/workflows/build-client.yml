@@ -1,71 +1,59 @@
-name: Build Artifacts on Commit
+name: Build Client Executable
 
 on:
   push:
-    branches:
-      - '**'
+    branches: [main]
+    paths:
+      - 'client.py'
 
 jobs:
-  build:
+  build-client:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build client executable
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
           pip install pyinstaller
+          pyinstaller --noconsole --onefile --icon=icon.ico client.py || pyinstaller --noconsole --onefile client.py
 
-      - name: Build executable
+      - name: Create executables directory
         run: |
-          pyinstaller --noconsole --onefile client.py
+          mkdir -p executables
         shell: bash
 
-      - name: Rename artifact
+      - name: Move executable to executables folder (Windows)
+        if: matrix.os == 'windows-latest'
         run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            mv dist/client.exe client-windows.exe
-          elif [ "$RUNNER_OS" == "Linux" ]; then
-            mv dist/client client-linux
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            mv dist/client client-macos
-          fi
+          if not exist executables mkdir executables
+          move dist\client.exe executables\client-windows.exe
+
+      - name: Move executable to executables folder (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mv dist/client executables/client-linux
         shell: bash
 
-      - name: Upload artifact
+      - name: Move executable to executables folder (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mv dist/client executables/client-macos
+        shell: bash
+
+      - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: client-${{ runner.os }}
-          path: |
-            client-*
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: build-artifacts
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: build-artifacts
-
-      - name: Commit and push artifacts
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "Update build artifacts [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:build-artifacts
+          name: client-executable-${{ matrix.os }}
+          path: executables/*
