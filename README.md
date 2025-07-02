@@ -35,3 +35,25 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 - Diese Zugangsdaten können über die Umgebungsvariablen `ADMIN_USERNAME` und `ADMIN_PASSWORD` gesetzt werden.
 - Die kompilierten Executables werden nach jedem Build automatisch im Ordner `executables/` im Repository gespeichert (siehe GitHub Actions Workflow).
 - Dokumentation und weitere Hinweise folgen.
+
+---
+
+### Fehlerbehebung: Submodul-Fehler
+
+Falls beim Klonen oder Arbeiten mit dem Repository folgende Fehlermeldung erscheint:
+
+```
+fatal: No url found for submodule path 'RAT' in .gitmodules
+```
+
+**Lösung:**  
+Das Projekt verwendet keine Submodule. Die Datei `.gitmodules` kann gelöscht werden, oder der Befehl kann ignoriert werden.  
+Falls das Problem weiterhin besteht, führe Folgendes aus:
+
+```sh
+git submodule deinit -f .
+git rm --cached RAT
+rm -f .gitmodules
+```
+
+Danach sollte das Repository wie gewohnt funktionieren.
