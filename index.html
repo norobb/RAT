@@ -378,6 +378,10 @@
   <button id="debug-toggle" title="Debug anzeigen/verstecken">🐞</button>
   <div id="debug-panel"></div>
   <script>
+    // --- Globale Variablen für Client-Auswahl ---
+    let selectedClientId = null;
+    let selectedClient = null;
+
     // --- DOM ELEMENTE OBEN DEFINIEREN ---
     const commandInput = document.getElementById("command-input");
     const sendButton = document.getElementById("send-button");
