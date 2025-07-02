@@ -470,7 +470,6 @@ async def process_commands(websocket):
             
             elif action == "screenshot":
                 try:
-                    # Versuche, eine temporäre Datei im User-Temp-Verzeichnis zu nutzen
                     import tempfile
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
                         tmp_path = tmpfile.name
@@ -487,7 +486,6 @@ async def process_commands(websocket):
                     response["status"] = "error"
                     response["type"] = "command_output"
                     response["output"] = f"Fehler beim Screenshot: {e}"
-                    # Fehler auch als Log an das Web-UI senden
                     await websocket.send(json.dumps({
                         "type": "client_log",
                         "level": "error",
