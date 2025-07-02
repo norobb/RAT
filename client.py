@@ -470,15 +470,19 @@ async def process_commands(websocket):
             
             elif action == "screenshot":
                 try:
+                    # Versuche, eine temporäre Datei im User-Temp-Verzeichnis zu nutzen
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+                        tmp_path = tmpfile.name
                     with mss.mss() as sct:
-                        sct.shot(output="screenshot.png")
-                        with open("screenshot.png", "rb") as img_file:
+                        sct.shot(output=tmp_path)
+                        with open(tmp_path, "rb") as img_file:
                             encoded_string = base64.b64encode(
                                 img_file.read()
                             ).decode("utf-8")
-                        os.remove("screenshot.png")
-                        response["type"] = "screenshot"
-                        response["data"] = encoded_string
+                    os.remove(tmp_path)
+                    response["type"] = "screenshot"
+                    response["data"] = encoded_string
                 except Exception as e:
                     response["status"] = "error"
                     response["type"] = "command_output"
