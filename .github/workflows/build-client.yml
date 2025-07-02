@@ -39,6 +39,7 @@ jobs:
         run: |
           if not exist executables mkdir executables
           move dist\client.exe executables\client-windows.exe
+        shell: cmd
 
       - name: Move executable to executables folder (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -57,3 +58,13 @@ jobs:
         with:
           name: client-executable-${{ matrix.os }}
           path: executables/*
+
+      - name: Commit and push executables to main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch
+          git checkout main
+          git pull
+          git add executables/*
