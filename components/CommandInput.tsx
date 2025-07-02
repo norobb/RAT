@@ -9,14 +9,14 @@ const COMMANDS = [
 	{ name: "history", description: "Browserverlauf anzeigen" },
 	{ name: "keylogger", description: "Keylogger-Log anzeigen" },
 	{ name: "ls", description: "Verzeichnis auflisten" },
+	{ name: "cd", description: "Wechsle das Verzeichnis" },
+	{ name: "encrypt", description: "Datei/Verzeichnis verschlüsseln" },
+	{ name: "decrypt", description: "Datei/Verzeichnis entschlüsseln" },
 	{ name: "systeminfo", description: "Systeminformationen anzeigen" },
 	{ name: "shutdown", description: "Client herunterfahren" },
 	{ name: "restart", description: "Client neustarten" },
 	{ name: "screenstream_start", description: "Live-Screen starten" },
 	{ name: "screenstream_stop", description: "Live-Screen stoppen" },
-	{ name: "cd", description: "Wechsle das Verzeichnis" },
-	{ name: "encrypt", description: "Datei/Verzeichnis verschlüsseln" },
-	{ name: "decrypt", description: "Datei/Verzeichnis entschlüsseln" },
 ];
 
 type CommandInputProps = {
