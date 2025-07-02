@@ -437,9 +437,9 @@
           <b>OS:</b> ${client.os || "?"}<br>
           <b>IP:</b> ${client.ip || (client.address ? client.address[0] : "")}
         </span>`;
-      li.dataset.clientId = client.id;
-      if (client.id === selectedClientId) li.classList.add("selected");
-      li.addEventListener("click", () => selectClient(client.id, client));
+      li.dataset.clientId = String(client.id); // immer als String
+      if (String(client.id) === String(selectedClientId)) li.classList.add("selected");
+      li.addEventListener("click", () => selectClient(String(client.id), client));
       return li;
     }
     function renderClientList(clients) {
@@ -450,10 +450,10 @@
       });
     }
     function selectClient(id, clientObj) {
-      selectedClientId = id;
-      selectedClient = id;
+      selectedClientId = String(id); // immer als String speichern
+      selectedClient = String(id);
       document.querySelectorAll("#client-list li").forEach((el) => el.classList.remove("selected"));
-      const li = clientList.querySelector(`li[data-client-id='${id}']`);
+      const li = clientList.querySelector(`li[data-client-id='${selectedClientId}']`);
       if (li) li.classList.add("selected");
       log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
       if (screenCanvas && screenCanvas.getContext) {
@@ -524,6 +524,7 @@
     });
 
     // --- BEFEHL SENDEN ---
+    // Stelle sicher, dass selectedClientId als String verwendet wird
     function sendCommand(customPayload = null) {
       if (!selectedClientId) {
         log("Fehler: Kein Client ausgewählt.", "error");
@@ -543,19 +544,19 @@
         cmdHistoryIdx = cmdHistory.length;
       }
       if (customPayload) {
-        payload = { target_id: selectedClientId, ...customPayload };
+        payload = { target_id: String(selectedClientId), ...customPayload };
       } else {
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
         let slashPayload = parseSlashCommand(commandText);
         if (slashPayload && slashPayload.action) {
-          payload = { target_id: selectedClientId, ...slashPayload };
+          payload = { target_id: String(selectedClientId), ...slashPayload };
         } else {
           const parts = commandText.split(" ");
           const action = parts[0].toLowerCase();
           const argument = parts.slice(1).join(" ");
           payload = {
-            target_id: selectedClientId,
+            target_id: String(selectedClientId),
             action: action,
           };
           if (action === "screenstream_start") handleLiveScreenCommand("/screenstream_start");
