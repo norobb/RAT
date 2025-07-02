@@ -469,15 +469,26 @@ async def process_commands(websocket):
                 response["output"] = result.stdout + result.stderr
             
             elif action == "screenshot":
-                with mss.mss() as sct:
-                    sct.shot(output="screenshot.png")
-                    with open("screenshot.png", "rb") as img_file:
-                        encoded_string = base64.b64encode(
-                            img_file.read()
-                        ).decode("utf-8")
-                    os.remove("screenshot.png")
-                    response["type"] = "screenshot"
-                    response["data"] = encoded_string
+                try:
+                    with mss.mss() as sct:
+                        sct.shot(output="screenshot.png")
+                        with open("screenshot.png", "rb") as img_file:
+                            encoded_string = base64.b64encode(
+                                img_file.read()
+                            ).decode("utf-8")
+                        os.remove("screenshot.png")
+                        response["type"] = "screenshot"
+                        response["data"] = encoded_string
+                except Exception as e:
+                    response["status"] = "error"
+                    response["type"] = "command_output"
+                    response["output"] = f"Fehler beim Screenshot: {e}"
+                    # Fehler auch als Log an das Web-UI senden
+                    await websocket.send(json.dumps({
+                        "type": "client_log",
+                        "level": "error",
+                        "msg": f"Screenshot-Fehler: {e}"
+                    }))
             
             elif action == "download":
                 path = command.get("path")
@@ -568,6 +579,12 @@ async def process_commands(websocket):
             error_response = {"status": "error", "error": f"Client-Fehler: {e}"}
             try:
                 await websocket.send(json.dumps(error_response))
+                # Fehler auch als Log an das Web-UI senden
+                await websocket.send(json.dumps({
+                    "type": "client_log",
+                    "level": "error",
+                    "msg": f"Client-Fehler: {e}"
+                }))
             except Exception as e2:
                 print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
 

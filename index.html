@@ -833,6 +833,10 @@
         log(data.message || data.error || "Fehler", "error");
       } else if (data.type === "debug") {
         debugLog(data.msg, data.level || "info");
+      } else if (data.type === "client_log") {
+        // Client-Log anzeigen
+        log("[Client] " + (data.msg || ""), data.level || "info");
+        debugLog("[Client] " + (data.msg || ""), data.level || "info");
       }
     };
 
