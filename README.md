@@ -31,7 +31,7 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 ## Hinweise
 
 - Nur für legale und ethische Zwecke verwenden!
+- Standard-Login für das Web-UI: Nutzername `admin`, Passwort `supersecretpassword123`
+- Diese Zugangsdaten können über die Umgebungsvariablen `ADMIN_USERNAME` und `ADMIN_PASSWORD` gesetzt werden.
+- Die kompilierten Executables werden nach jedem Build automatisch im Ordner `executables/` im Repository gespeichert (siehe GitHub Actions Workflow).
 - Dokumentation und weitere Hinweise folgen.
-
-## Website
-> Diese Seite bei [https://norobb.github.io/RAT/](https://norobb.github.io/RAT) öffnen

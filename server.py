@@ -27,8 +27,8 @@ app = FastAPI()
 
 # --- Basic Auth Konfiguration ---
 security = HTTPBasic()
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "supersecretpassword123"
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 

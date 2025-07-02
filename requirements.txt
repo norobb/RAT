@@ -1,9 +1,9 @@
+cryptography
+fastapi
+mss
+pillow
+pynput
+pyautogui
+requests
 uvicorn
 websockets
-fastapi
-pynput
-requests
-pillow
-pyautogui
-cryptography
-mss

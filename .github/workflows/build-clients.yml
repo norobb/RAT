@@ -67,6 +67,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -75,6 +76,5 @@ jobs:
           git checkout main
           git pull origin main
           git add executables/*
-          git commit -m "Update executables [skip ci]" || echo "No changes to commit"
-          git push origin main
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update executables [skip ci]"
           git push origin main

