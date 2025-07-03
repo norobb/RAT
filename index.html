@@ -527,8 +527,33 @@
       }
     });
 
+    // --- Upload-Dialog: /upload [Zielpfad] ---
+    uploadInput.addEventListener("change", function () {
+      const file = uploadInput.files && uploadInput.files[0];
+      if (!file) return;
+      // Zielpfad aus dem letzten /upload-Befehl merken
+      const lastUploadPath = window._lastUploadTargetPath || ".";
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        // base64 extrahieren
+        let base64 = "";
+        if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
+          base64 = dataUrl.split(",")[1];
+        }
+        const payload = {
+          action: "upload",
+          filename: lastUploadPath,
+          data: base64,
+        };
+        sendCommand(payload);
+      };
+      reader.readAsDataURL(file);
+      // Reset input für weitere Uploads
+      uploadInput.value = "";
+    });
+
     // --- BEFEHL SENDEN ---
-    // Stelle sicher, dass selectedClientId als String verwendet wird
     function sendCommand(customPayload = null) {
       if (!selectedClientId) {
         log("Fehler: Kein Client ausgewählt.", "error");
@@ -550,6 +575,17 @@
       if (customPayload) {
         payload = { target_id: String(selectedClientId), ...customPayload };
       } else {
+        // /upload [zielpfad]
+        if (commandText.startsWith("/upload")) {
+          const parts = commandText.split(" ");
+          const targetPath = parts.slice(1).join(" ").trim() || ".";
+          window._lastUploadTargetPath = targetPath;
+          uploadInput.click();
+          // Kein Senden an den Server, bis Datei gewählt wurde!
+          commandInput.value = "";
+          hideSuggest();
+          return;
+        }
         // /screenstream_start und /screenstream_stop UI-Handling
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
