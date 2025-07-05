@@ -451,6 +451,10 @@ class WebcamStreamer:
             import cv2
             import base64
             import asyncio
+        except ImportError:
+            await self._ws.send(json.dumps({"type": "command_output", "output": "cv2 (OpenCV) ist nicht installiert. Live-Webcam-Stream nicht möglich."}))
+            return
+        try:
             cam = cv2.VideoCapture(0)
             if not cam.isOpened():
                 await self._ws.send(json.dumps({"type": "command_output", "output": "Webcam konnte nicht geöffnet werden"}))
@@ -467,8 +471,6 @@ class WebcamStreamer:
                 await self._ws.send(b64img)
                 await asyncio.sleep(1 / self._fps)
             cam.release()
-        except ImportError:
-            await self._ws.send(json.dumps({"type": "command_output", "output": "cv2 nicht installiert"}))
         except Exception as e:
             await self._ws.send(json.dumps({"type": "command_output", "output": f"Webcam Fehler: {e}"}))
 
