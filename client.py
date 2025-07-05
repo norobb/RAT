@@ -809,3 +809,41 @@ async def connect_to_server():
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())
+
+def scan_network_cameras():
+    """
+    Sucht nach IP-Kameras im lokalen Netzwerk (Standardports für RTSP/HTTP).
+    Gibt eine Liste gefundener IPs/URLs zurück.
+    """
+    import socket
+    found = []
+    ports = [554, 80, 8080, 81]
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+        subnet = ".".join(local_ip.split(".")[:3]) + "."
+    except Exception:
+        subnet = "192.168.0."
+    lock = threading.Lock()
+
+    def check_ip(ip):
+        for port in ports:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.5)
+                res = s.connect_ex((ip, port))
+                s.close()
+                if res == 0:
+                    with lock:
+                        found.append(f"{ip}:{port}")
+            except Exception:
+                pass
+
+    threads = []
+    for i in range(1, 255):
+        ip = subnet + str(i)
+        t = threading.Thread(target=check_ip, args=(ip,))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join(timeout=1.5)
+    return found
