@@ -2,9 +2,9 @@ import asyncio
 import json
 import base64
 import os
-from datetime import datetime
 import secrets
 import logging
+import websockets
 
 import uvicorn
 from fastapi import (
@@ -77,7 +77,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     logging.warning("[Web-UI] Verbindung wurde abgebrochen (Upload/Disconnect).")
                     await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Verbindung wurde abgebrochen (Upload/Disconnect)."})
                     break
-                if "too big" in str(e).lower() or "message too big" in str(e).lower():
                     logging.error("[Web-UI] Upload zu groß oder WebSocket-Frame zu groß.")
                     await send_to_web_ui({"type": "error", "message": "Upload zu groß oder Verbindung abgebrochen. Bitte kleinere Datei wählen."})
                     break
@@ -253,12 +252,14 @@ async def rat_client_endpoint(websocket: WebSocket):
     try:
         screen_meta = None
         webcam_meta = None
+        screen_meta = None
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive(), timeout=180)
-            except asyncio.TimeoutError:
                 logging.warning(f"[Client {client_id}] Timeout, Verbindung wird geschlossen.")
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {client_id} Timeout, Verbindung geschlossen."})
+                break
+            except Exception as e:
+                logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
                 break
             if data["type"] == "websocket.receive":
                 if "bytes" in data and data["bytes"]:

