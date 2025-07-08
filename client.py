@@ -548,6 +548,7 @@ class WebcamStreamer:
                 if not ret:
                     await self._ws.send(json.dumps({"type": "command_output", "output": "Kein Bild von Webcam erhalten"}))
                     break
+                # Sende das Bild als base64-String (wie erwartet vom Web-UI)
                 _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                 b64img = base64.b64encode(buf.tobytes()).decode("utf-8")
                 meta = {"action": "webcam_frame"}

