@@ -25,6 +25,14 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Ensure requirements.txt exists
+        run: |
+          if [ ! -f requirements.txt ]; then echo "" > requirements.txt; fi
+        shell: bash
+
+      - name: Install build dependencies
+        run: pip install --upgrade pip wheel setuptools
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
