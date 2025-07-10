@@ -8,3 +8,4 @@ requests
 uvicorn
 websockets
 opencv-python
+jwt
