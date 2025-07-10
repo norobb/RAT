@@ -612,13 +612,10 @@ def shutdown_or_restart(action):
         return f"Fehler beim Ausführen von {action}: {e}"
 
 # --- Heartbeat/Ping ---
-async def heartbeat(ws, interval=60):
+async def heartbeat(ws):
     while True:
-        try:
-            await ws.send(json.dumps({"type": "ping"}))
-        except Exception:
-            break
-        await asyncio.sleep(interval)
+        await ws.send_json({"type": "ping"})
+        await asyncio.sleep(60)
 
 # === Hauptlogik: Kommandos ===
 async def process_commands(websocket):

