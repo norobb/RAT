@@ -17,6 +17,9 @@ const COMMANDS = [
 	{ name: "restart", description: "Client neustarten" },
 	{ name: "screenstream_start", description: "Live-Screen starten" },
 	{ name: "screenstream_stop", description: "Live-Screen stoppen" },
+	{ name: "scan_cameras", description: "Suche nach Netzwerk-Kameras im LAN" },
+	{ name: "webcam_start", description: "Live-Webcam-Stream starten" },
+	{ name: "webcam_stop", description: "Live-Webcam-Stream stoppen" },
 ];
 
 type CommandInputProps = {
@@ -141,6 +144,11 @@ export default function CommandInput({
 						fontSize: "1em",
 					}}
 				>
+					{filteredCommands.length === 0 && (
+						<li style={{ padding: "8px 16px", color: "#b9bbbe" }}>
+							Keine Befehle gefunden
+						</li>
+					)}
 					{filteredCommands.map((cmd, idx) => (
 						<li
 							id={`command-suggestion-${cmd.name}`}

