@@ -10,10 +10,7 @@ permissions:
   contents: write
 jobs:
   build-client:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,8 +24,8 @@ jobs:
 
       - name: Ensure requirements.txt exists
         run: |
-          if [ ! -f requirements.txt ]; then echo "" > requirements.txt; fi
-        shell: bash
+          if not exist requirements.txt echo "" > requirements.txt
+        shell: cmd
 
       - name: Install build dependencies
         run: pip install --upgrade pip wheel setuptools
@@ -43,32 +40,18 @@ jobs:
 
       - name: Create executables directory
         run: |
-          mkdir -p executables
-        shell: bash
-
-      - name: Move executable to executables folder (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
           if not exist executables mkdir executables
-          move dist\client.exe executables\client-windows.exe
         shell: cmd
 
-      - name: Move executable to executables folder (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Move executable to executables folder (Windows)
         run: |
-          mv dist/client executables/client-linux
-        shell: bash
-
-      - name: Move executable to executables folder (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          mv dist/client executables/client-macos
-        shell: bash
+          move dist\client.exe executables\client-windows.exe
+        shell: cmd
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: client-executable-${{ matrix.os }}
+          name: client-executable-windows
           path: executables/*
 
       - name: Commit and push executables to main branch
