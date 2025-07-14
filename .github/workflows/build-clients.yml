@@ -10,7 +10,7 @@ permissions:
   contents: write
 jobs:
   build-client:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest # <-- Hier wurde von ubuntu-latest auf windows-latest geändert
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,12 +23,14 @@ jobs:
           python-version: '3.10'
 
       - name: Ensure requirements.txt exists
+        # Für Windows (PowerShell als Standard-Shell) ist "Test-Path" die Entsprechung von "-f" oder "not exist".
+        # Alternativ können wir bash als Shell für diesen Schritt beibehalten und die bash-Syntax verwenden.
+        # Ich belasse es bei PowerShell, da es die Standard-Shell unter Windows ist.
         run: |
-          # Use -f to check if a regular file exists
-          if [ ! -f requirements.txt ]; then
-            echo "" > requirements.txt
-          fi
-        shell: bash
+          if (-Not (Test-Path requirements.txt)) {
+            New-Item -Path requirements.txt -ItemType File -Value ""
+          }
+        shell: pwsh # <-- Explizite Verwendung von PowerShell
 
       - name: Install build dependencies
         run: pip install --upgrade pip wheel setuptools
@@ -39,36 +41,34 @@ jobs:
       - name: Build client executable
         run: |
           pip install pyinstaller
-          # On Linux, the executable will be named 'client' (no .exe extension)
-          # The icon argument might behave differently on Linux/macOS
+          # Auf Windows funktioniert das Icon direkt
           pyinstaller --noconsole --onefile --icon=icon.ico client.py || pyinstaller --noconsole --onefile client.py
 
       - name: Create executables directory
+        # Für Windows (PowerShell) verwenden wir Test-Path -PathType Container für Verzeichnisse
         run: |
-          # Use -d to check if a directory exists
-          if [ ! -d executables ]; then
+          if (-Not (Test-Path -PathType Container executables)) {
             mkdir executables
-          fi
-        shell: bash
+          }
+        shell: pwsh # <-- Explizite Verwendung von PowerShell
 
-      - name: Move executable to executables folder (Linux)
-        # Note: On ubuntu-latest, the executable will not have a .exe extension.
-        # This step is specifically for Linux/macOS and needs adjustment for Windows.
-        # You might consider separate jobs for Windows/Linux builds if you need .exe.
+      - name: Move executable to executables folder (Windows)
         run: |
-          mv dist/client executables/client-linux
-        shell: bash
+          # Der Befehl 'move' funktioniert in PowerShell und CMD
+          move dist\client.exe executables\client-windows.exe
+        shell: pwsh # <-- Explizite Verwendung von PowerShell
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: client-executable-linux
+          name: client-executable-windows
           path: executables/*
 
       - name: Commit and push executables to main branch
         if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Git-Befehle funktionieren gut mit bash auf Windows, daher belassen wir es hier.
         shell: bash
         run: |
           git config --global user.name "github-actions[bot]"
