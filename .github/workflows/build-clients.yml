@@ -24,7 +24,10 @@ jobs:
 
       - name: Ensure requirements.txt exists
         run: |
-          if not exist requirements.txt echo "" > requirements.txt
+          # Use -f to check if a regular file exists
+          if [ ! -f requirements.txt ]; then
+            echo "" > requirements.txt
+          fi
         shell: bash
 
       - name: Install build dependencies
@@ -36,22 +39,30 @@ jobs:
       - name: Build client executable
         run: |
           pip install pyinstaller
+          # On Linux, the executable will be named 'client' (no .exe extension)
+          # The icon argument might behave differently on Linux/macOS
           pyinstaller --noconsole --onefile --icon=icon.ico client.py || pyinstaller --noconsole --onefile client.py
 
       - name: Create executables directory
         run: |
-          if not exist executables mkdir executables
+          # Use -d to check if a directory exists
+          if [ ! -d executables ]; then
+            mkdir executables
+          fi
         shell: bash
 
-      - name: Move executable to executables folder (Windows)
+      - name: Move executable to executables folder (Linux)
+        # Note: On ubuntu-latest, the executable will not have a .exe extension.
+        # This step is specifically for Linux/macOS and needs adjustment for Windows.
+        # You might consider separate jobs for Windows/Linux builds if you need .exe.
         run: |
-          move dist\client.exe executables\client-windows.exe
+          mv dist/client executables/client-linux
         shell: bash
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: client-executable-windows
+          name: client-executable-linux
           path: executables/*
 
       - name: Commit and push executables to main branch
@@ -67,5 +78,6 @@ jobs:
           git checkout main
           git pull origin main
           git add executables/*
-          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update executables [skip ci]"
+          # Check if there are actual changes before committing
+          git diff --cached --quiet || git commit -m "Update executables [skip ci]"
           git push origin main
