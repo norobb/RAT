@@ -25,7 +25,7 @@ jobs:
       - name: Ensure requirements.txt exists
         run: |
           if not exist requirements.txt echo "" > requirements.txt
-        shell: cmd
+        shell: bash
 
       - name: Install build dependencies
         run: pip install --upgrade pip wheel setuptools
@@ -41,12 +41,12 @@ jobs:
       - name: Create executables directory
         run: |
           if not exist executables mkdir executables
-        shell: cmd
+        shell: bash
 
       - name: Move executable to executables folder (Windows)
         run: |
           move dist\client.exe executables\client-windows.exe
-        shell: cmd
+        shell: bash
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
