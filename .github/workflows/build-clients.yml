@@ -5,32 +5,33 @@ on:
     branches: [main]
     paths:
       - 'client.py'
+      - 'requirements.txt' # Gut, auch auf Änderungen hier zu reagieren
+      - 'icon.ico'         # Und auf Änderungen am Icon
 
 permissions:
   contents: write
 jobs:
   build-client:
-    runs-on: windows-latest # <-- Hier wurde von ubuntu-latest auf windows-latest geändert
+    runs-on: windows-latest # Der Runner für Windows
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Holt den gesamten Verlauf, wichtig für `git commit` später
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.10' # Verwendet Python 3.10
 
       - name: Ensure requirements.txt exists
-        # Für Windows (PowerShell als Standard-Shell) ist "Test-Path" die Entsprechung von "-f" oder "not exist".
-        # Alternativ können wir bash als Shell für diesen Schritt beibehalten und die bash-Syntax verwenden.
-        # Ich belasse es bei PowerShell, da es die Standard-Shell unter Windows ist.
+        shell: pwsh # PowerShell ist die Standard-Shell unter Windows, aber hier explizit gesetzt.
         run: |
+          # Prüft, ob requirements.txt existiert. Wenn nicht, wird sie leer erstellt.
           if (-Not (Test-Path requirements.txt)) {
             New-Item -Path requirements.txt -ItemType File -Value ""
           }
-        shell: pwsh # <-- Explizite Verwendung von PowerShell
 
       - name: Install build dependencies
         run: pip install --upgrade pip wheel setuptools
@@ -41,43 +42,62 @@ jobs:
       - name: Build client executable
         run: |
           pip install pyinstaller
-          # Auf Windows funktioniert das Icon direkt
+          # Erstellt die client.exe mit oder ohne Icon.ico (falls das Icon fehlt/Fehler verursacht)
           pyinstaller --noconsole --onefile --icon=icon.ico client.py || pyinstaller --noconsole --onefile client.py
 
       - name: Create executables directory
-        # Für Windows (PowerShell) verwenden wir Test-Path -PathType Container für Verzeichnisse
+        shell: pwsh
         run: |
+          # Prüft, ob das 'executables'-Verzeichnis existiert. Wenn nicht, wird es erstellt.
           if (-Not (Test-Path -PathType Container executables)) {
             mkdir executables
           }
-        shell: pwsh # <-- Explizite Verwendung von PowerShell
 
       - name: Move executable to executables folder (Windows)
+        shell: pwsh
         run: |
-          # Der Befehl 'move' funktioniert in PowerShell und CMD
-          move dist\client.exe executables\client-windows.exe
-        shell: pwsh # <-- Explizite Verwendung von PowerShell
+          $sourcePath = "dist\client.exe"
+          $destinationDir = "executables"
+          $destinationFile = "$destinationDir\client-windows.exe"
+
+          # Entfernt die alte ausführbare Datei, falls sie existiert, um "file already exists" zu vermeiden.
+          if (Test-Path $destinationFile) {
+            Remove-Item $destinationFile -Force
+          }
+
+          # Verschiebt die neu erstellte ausführbare Datei an den Zielort.
+          Move-Item $sourcePath $destinationFile
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
           name: client-executable-windows
-          path: executables/*
+          path: executables/* # Lädt alle Dateien im 'executables'-Ordner als Artefakt hoch
 
       - name: Commit and push executables to main branch
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' # Führt diesen Schritt nur auf dem main-Branch aus
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Git-Befehle funktionieren gut mit bash auf Windows, daher belassen wir es hier.
-        shell: bash
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Benötigt den Standard-GitHub-Token für Schreibzugriff
+        shell: bash # Für Git-Befehle ist Bash oft einfacher und konsistenter
         run: |
+          # Konfiguriert Git-Benutzerinformationen für den Commit
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stellt sicher, dass das Remote für den Push korrekt ist und authentifiziert
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          
+          # Holt die neuesten Änderungen vom Main-Branch und checkout
           git fetch origin main
           git checkout main
           git pull origin main
+          
+          # Fügt alle Dateien im 'executables'-Verzeichnis zum Staging-Bereich hinzu
           git add executables/*
-          # Check if there are actual changes before committing
+          
+          # Erstellt einen Commit, wenn es Änderungen gibt, ansonsten macht es nichts.
+          # Das "||" bedeutet, dass der Commit nur ausgeführt wird, wenn der "git diff"-Befehl fehlschlägt (was bedeutet, dass es Änderungen gibt).
           git diff --cached --quiet || git commit -m "Update executables [skip ci]"
+          
+          # Pusht die Änderungen zum Main-Branch
           git push origin main
