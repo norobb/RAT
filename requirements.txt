@@ -9,3 +9,4 @@ uvicorn
 websockets
 opencv-python
 PyJWT
+bcrypt

