@@ -15,8 +15,8 @@
 - **Web UI:** `index.html` - Enhanced SPA with server stats, improved command interface
 - **Components:** `components/CommandInput.tsx` - React components for command input
 - **Executables:** Auto-built via GitHub Actions workflow, stored in `executables/`
-- **Authentication:** JWT + Basic Auth with brute-force protection, IP banning
-- **APIs:** REST endpoints for stats (/api/stats), clients (/api/clients), IP management
+- **Authentication:** JWT + Basic Auth with brute-force protection, IP banning, fallback mechanisms
+- **APIs:** REST endpoints for stats (/api/stats), clients (/api/clients), IP management with JWT auth
 
 ## New Features Added
 - **Process Management:** List processes (/process_list), kill processes (/kill_process)

