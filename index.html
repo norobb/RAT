@@ -566,8 +566,16 @@
         showNotification('WebSocket connection established', 'success');
         reconnectAttempts = 0;
         
-        // Request client list immediately
-        requestClientList();
+        // Request client list immediately and repeatedly
+        setTimeout(() => requestClientList(), 100);
+        
+        // Set up periodic client list requests
+        setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log('Periodic client list request...');
+            requestClientList();
+          }
+        }, 3000);
         
         // Debug: Log that we're requesting client list
         console.log('WebSocket opened, requesting client list...');
@@ -624,6 +632,7 @@
       switch (data.type) {
         case 'client_list':
           console.log('Updating client list with clients:', data.clients); // Debug log
+          console.log('Received client list message:', data); // Full debug log
           updateClientList(data.clients || []);
           break;
           
