@@ -39,8 +39,8 @@ app.add_middleware(
 
 # --- Basic Auth Konfiguration ---
 security = HTTPBasic()
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # --- JWT Konfiguration ---
 JWT_SECRET = os.getenv("JWT_SECRET", "ratsecretjwt")
