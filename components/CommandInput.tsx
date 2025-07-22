@@ -1,37 +1,47 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 
 const COMMANDS = [
-	{ name: "help", description: "Zeigt die Hilfe an" },
-	{ name: "exec", description: "Führe einen Shell-Befehl aus" },
-	{ name: "screenshot", description: "Screenshot des Bildschirms" },
-	{ name: "download", description: "Datei herunterladen (Pfad angeben)" },
-	{ name: "upload", description: "Datei zum Client hochladen" },
-	{ name: "history", description: "Browserverlauf anzeigen" },
-	{ name: "keylogger", description: "Keylogger-Log anzeigen" },
-	{ name: "ls", description: "Verzeichnis auflisten" },
-	{ name: "cd", description: "Wechsle das Verzeichnis" },
-	{ name: "encrypt", description: "Datei/Verzeichnis verschlüsseln" },
-	{ name: "decrypt", description: "Datei/Verzeichnis entschlüsseln" },
-	{ name: "systeminfo", description: "Systeminformationen anzeigen" },
-	{ name: "shutdown", description: "Client herunterfahren" },
-	{ name: "restart", description: "Client neustarten" },
-	{ name: "screenstream_start", description: "Live-Screen starten" },
-	{ name: "screenstream_stop", description: "Live-Screen stoppen" },
-	{ name: "scan_cameras", description: "Suche nach Netzwerk-Kameras im LAN" },
-	{ name: "webcam_start", description: "Live-Webcam-Stream starten" },
-	{ name: "webcam_stop", description: "Live-Webcam-Stream stoppen" },
+	{ name: "help", description: "Show available commands", category: "general" },
+	{ name: "exec", description: "Execute shell command", category: "system" },
+	{ name: "screenshot", description: "Take screenshot", category: "media" },
+	{ name: "download", description: "Download file (specify path)", category: "files" },
+	{ name: "upload", description: "Upload file to client", category: "files" },
+	{ name: "history", description: "Show browser history", category: "info" },
+	{ name: "keylogger", description: "Show keylogger data", category: "surveillance" },
+	{ name: "ls", description: "List directory contents", category: "files" },
+	{ name: "cd", description: "Change directory", category: "files" },
+	{ name: "encrypt", description: "Encrypt files/directory", category: "security" },
+	{ name: "decrypt", description: "Decrypt files/directory", category: "security" },
+	{ name: "systeminfo", description: "Show system information", category: "info" },
+	{ name: "process_list", description: "List running processes", category: "system" },
+	{ name: "kill_process", description: "Kill process by PID", category: "system" },
+	{ name: "network_info", description: "Show network information", category: "network" },
+	{ name: "network_scan", description: "Scan network for hosts", category: "network" },
+	{ name: "shutdown", description: "Shutdown client", category: "power" },
+	{ name: "restart", description: "Restart client", category: "power" },
+	{ name: "screenstream_start", description: "Start live screen stream", category: "media" },
+	{ name: "screenstream_stop", description: "Stop live screen stream", category: "media" },
+	{ name: "scan_cameras", description: "Scan for network cameras", category: "network" },
+	{ name: "webcam_start", description: "Start webcam stream", category: "media" },
+	{ name: "webcam_stop", description: "Stop webcam stream", category: "media" },
 ];
 
 type CommandInputProps = {
 	value?: string;
 	onChange?: (val: string) => void;
 	onCommandSubmit?: (val: string) => void;
+	placeholder?: string;
+	disabled?: boolean;
+	className?: string;
 };
 
 export default function CommandInput({
 	value,
 	onChange,
 	onCommandSubmit,
+	placeholder = "Send message or type / for commands",
+	disabled = false,
+	className = "",
 }: CommandInputProps) {
 	const [input, setInput] = useState(value ?? "");
 	const [showSuggestions, setShowSuggestions] = useState(false);
@@ -46,7 +56,18 @@ export default function CommandInput({
 	const filteredCommands = useMemo(() => {
 		if (!input.startsWith("/")) return [];
 		const query = input.slice(1).toLowerCase();
-		return COMMANDS.filter((cmd) => cmd.name.startsWith(query));
+		return COMMANDS.filter((cmd) => 
+			cmd.name.toLowerCase().includes(query) || 
+			cmd.description.toLowerCase().includes(query) ||
+			cmd.category.toLowerCase().includes(query)
+		).sort((a, b) => {
+			// Prioritize exact matches
+			const aExact = a.name.toLowerCase().startsWith(query);
+			const bExact = b.name.toLowerCase().startsWith(query);
+			if (aExact && !bExact) return -1;
+			if (!aExact && bExact) return 1;
+			return a.name.localeCompare(b.name);
+		});
 	}, [input]);
 
 	useEffect(() => {
@@ -102,6 +123,21 @@ export default function CommandInput({
 		onChange?.(e.target.value);
 	};
 
+	const getCategoryColor = (category: string) => {
+		const colors: Record<string, string> = {
+			general: "#6b7280",
+			system: "#ef4444", 
+			media: "#8b5cf6",
+			files: "#10b981",
+			info: "#3b82f6",
+			surveillance: "#f59e0b",
+			security: "#f97316",
+			network: "#06b6d4",
+			power: "#dc2626"
+		};
+		return colors[category] || "#6b7280";
+	};
+
 	return (
 		<div style={{ position: "relative" }}>
 			<input
@@ -109,7 +145,9 @@ export default function CommandInput({
 				value={input}
 				onChange={handleInputChange}
 				onKeyDown={handleKeyDown}
-				placeholder="Nachricht senden oder / für Befehle"
+				placeholder={placeholder}
+				disabled={disabled}
+				className={className}
 				style={{
 					width: "100%",
 					outline: showSuggestions ? "2px solid #5865f2" : "none",
@@ -146,7 +184,7 @@ export default function CommandInput({
 				>
 					{filteredCommands.length === 0 && (
 						<li style={{ padding: "8px 16px", color: "#b9bbbe" }}>
-							Keine Befehle gefunden
+							No commands found
 						</li>
 					)}
 					{filteredCommands.map((cmd, idx) => (
@@ -173,12 +211,28 @@ export default function CommandInput({
 							}}
 							onMouseEnter={() => setSelectedIndex(idx)}
 						>
-							<span style={{ fontWeight: 600, minWidth: 110 }}>{"/" + cmd.name}</span>
-							<span
-								style={{ color: "#b9bbbe", marginLeft: 10, fontSize: "0.97em" }}
-							>
-								{cmd.description}
-							</span>
+							<div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+								<span 
+									style={{ 
+										backgroundColor: getCategoryColor(cmd.category),
+										color: "white",
+										fontSize: "0.7em",
+										padding: "2px 6px",
+										borderRadius: "3px",
+										marginRight: "8px",
+										textTransform: "uppercase",
+										fontWeight: "bold"
+									}}
+								>
+									{cmd.category}
+								</span>
+								<span style={{ fontWeight: 600, minWidth: 110 }}>{"/" + cmd.name}</span>
+								<span
+									style={{ color: "#b9bbbe", marginLeft: 10, fontSize: "0.97em" }}
+								>
+									{cmd.description}
+								</span>
+							</div>
 						</li>
 					))}
 				</ul>

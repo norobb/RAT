@@ -27,12 +27,14 @@
 
 ## Code Style
 - **Language:** Python 3.10+ with async/await patterns, type hints for key functions
+- **Frontend:** TypeScript/React components (CommandInput.tsx), vanilla JS for main UI
 - **Imports:** Standard library first, then third-party (asyncio, websockets, fastapi, psutil)
 - **Error Handling:** Try-catch blocks with logging, graceful WebSocket disconnections
-- **Naming:** snake_case for functions/variables, German comments in existing code
+- **Naming:** snake_case for functions/variables, all UI text in English
 - **Logging:** Use Python logging module with INFO level, structured messages
 - **WebSockets:** JSON message protocol, handle both text and binary data
 - **Security:** Never log secrets, use bcrypt for passwords, JWT for authentication
+- **UI:** Responsive design with Tailwind CSS, categorized command suggestions, notifications
 
 ## Key Patterns
 - WebSocket handlers use typed global dictionaries (RAT_CLIENTS, CLIENT_INFOS, COMMAND_LOGS)

