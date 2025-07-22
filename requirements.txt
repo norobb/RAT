@@ -10,3 +10,5 @@ websockets
 opencv-python
 PyJWT
 bcrypt
+psutil
+ipaddress

