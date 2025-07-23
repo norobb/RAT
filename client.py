@@ -204,7 +204,7 @@ class ScreenStreamer:
 screen_streamer = ScreenStreamer()
 
 # === Hauptlogik: Befehlsverarbeitung ===
-async def process_commands(websocket: websockets.WebSocketClientProtocol):
+async def process_commands(websocket: websockets.ClientConnection):
     async for message in websocket:
         try:
             if isinstance(message, bytes): continue
@@ -260,7 +260,7 @@ async def process_commands(websocket: websockets.WebSocketClientProtocol):
             logging.error(f"Fehler bei Befehlsverarbeitung: {e}")
 
 # --- Heartbeat & Hauptverbindung ---
-async def heartbeat(ws: websockets.WebSocketClientProtocol):
+async def heartbeat(ws: websockets.ClientConnection):
     while True:
         try:
             await ws.send(json.dumps({"type": "ping"}))

