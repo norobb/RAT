@@ -1,43 +1,26 @@
 # RAT (Remote Administration Tool) - Agent Guidelines
 
 ## Build/Test Commands
-- **Start Server:** `python server.py` or `uvicorn server:app --host 0.0.0.0 --port 8000`
-- **Start Server (Unix):** `bash start.sh`
+- **Start Server:** `python server.py`
 - **Install Dependencies:** `pip install -r requirements.txt`
 - **Build Client Executable:** `pyinstaller --noconsole --onefile --icon=icon.ico client.py`
-- **Quick Client Build:** Run `compile.bat` (Windows)
-- **Test Server:** Visit `http://localhost:8000` for web UI (admin/supersecretpassword123)
-- **Syntax Check:** `python -m py_compile server.py client.py hash.py`
+- **Test Server:** Visit `http://localhost:8000` (or the configured port) for the web UI.
 
 ## Architecture
-- **FastAPI Backend:** `server.py` - WebSocket server with REST API, command logging, IP banning
-- **Python Client:** `client.py` - RAT client with persistence, keylogging, screen streaming, process management
-- **Web UI:** `index.html` - Enhanced SPA with server stats, improved command interface
-- **Components:** `components/CommandInput.tsx` - React components for command input
-- **Executables:** Auto-built via GitHub Actions workflow, stored in `executables/`
-- **Authentication:** JWT + Basic Auth with brute-force protection, IP banning, fallback mechanisms
-- **APIs:** REST endpoints for stats (/api/stats), clients (/api/clients), IP management with JWT auth
-
-## New Features Added
-- **Process Management:** List processes (/process_list), kill processes (/kill_process)
-- **Network Tools:** Network info (/network_info), network scanning (/network_scan)
-- **Server Monitoring:** Real-time server stats with CPU, RAM, disk usage
-- **Security:** IP banning system, failed login tracking, command audit logging
-- **Enhanced UI:** Server stats modal, new quick action buttons, improved command parsing
+- **FastAPI Backend (`server.py`):** Manages WebSocket connections from both the web UI and RAT clients. Uses JWT for secure UI authentication and features a robust, asynchronous architecture. Handles command forwarding and client state management.
+- **Python Client (`client.py`):** Connects to the server via WebSocket, registers itself by sending a structured JSON `info` message, and then awaits commands. Includes modules for screen streaming (base64), file operations, and system information gathering. Features persistence on Windows and a keylogger.
+- **Web UI (`index.html`):** A responsive, single-page application built with Tailwind CSS and vanilla JavaScript. Provides a full control panel for interacting with connected clients, viewing live media streams, and monitoring server status. It is optimized for both desktop and mobile use.
+- **Authentication:** JWT for the web UI, ensuring that only authenticated users can connect to the WebSocket and access the control panel. Includes brute-force protection.
 
 ## Code Style
-- **Language:** Python 3.10+ with async/await patterns, type hints for key functions
-- **Frontend:** TypeScript/React components (CommandInput.tsx), vanilla JS for main UI
-- **Imports:** Standard library first, then third-party (asyncio, websockets, fastapi, psutil)
-- **Error Handling:** Try-catch blocks with logging, graceful WebSocket disconnections
-- **Naming:** snake_case for functions/variables, all UI text in English
-- **Logging:** Use Python logging module with INFO level, structured messages
-- **WebSockets:** JSON message protocol, handle both text and binary data
-- **Security:** Never log secrets, use bcrypt for passwords, JWT for authentication
-- **UI:** Responsive design with Tailwind CSS, categorized command suggestions, notifications
+- **Language:** Python 3.10+ with `asyncio` for concurrency. Type hints are used for clarity.
+- **Frontend:** Modern vanilla JavaScript (ES6+) with Tailwind CSS for styling. The UI is self-contained in `index.html`.
+- **Communication Protocol:** All communication between server, client, and UI is done via JSON-formatted WebSocket messages.
+- **Error Handling:** Robust error handling and connection-retry logic with exponential backoff in the client.
+- **Logging:** Standard Python `logging` module is used on both client and server for diagnostics.
 
 ## Key Patterns
-- WebSocket handlers use typed global dictionaries (RAT_CLIENTS, CLIENT_INFOS, COMMAND_LOGS)
-- Command processing in async loops with proper exception handling and logging
-- File uploads/downloads via base64 encoding with chunked upload support
-- Persistent client state via local files, enhanced with process/network monitoring
+- **Client Handshake:** Clients initiate connection and send an `info` message with their system details. The server uses this to register the client and assign a unique ID.
+- **Command Forwarding:** The web UI sends commands for specific `target_ids` to the server, which then relays the command to the appropriate client(s).
+- **Asynchronous Tasks:** Server and client make extensive use of `asyncio.create_task` to handle concurrent operations like heartbeats, command processing, and media streaming without blocking.
+- **State Management:** Server maintains the state of connected clients (`CLIENT_INFOS`) and web UIs (`WEB_UI_SOCKETS`) in memory. Inactive clients are periodically cleaned up.

