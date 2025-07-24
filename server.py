@@ -108,6 +108,11 @@ async def get_current_user_jwt(request: Request) -> str:
     return user
 
 # --- Web-UI Endpunkte ---
+@app.get("/login", response_class=HTMLResponse)
+async def get_login_page():
+    return FileResponse("login.html")
+
+
 @app.post("/login")
 async def login(request: Request):
     client_ip = request.client.host if request.client else "unknown"
