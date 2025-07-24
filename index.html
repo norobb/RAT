@@ -1025,35 +1025,42 @@
     }
 
     // Server Stats Functions
+    async function fetchWithAuth(url, options = {}) {
+      const token = localStorage.getItem('rat_token');
+      if (!token) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`
+      };
+
+      const response = await fetch(url, { ...options, headers });
+
+      if (response.status === 401) {
+        localStorage.removeItem('rat_token');
+        window.location.href = '/login';
+        return;
+      }
+
+      return response;
+    }
+
     async function loadServerStats() {
       try {
-        const token = localStorage.getItem('rat_token');
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await fetch('/api/stats', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
+        const response = await fetchWithAuth('/api/stats');
+        if (!response) return;
+
         if (response.ok) {
           const stats = await response.json();
           displayServerStats(stats);
-        } else if (response.status === 401) {
-          // Token expired, try fallback or redirect to login
-          console.log('JWT token invalid, redirecting to login');
-          localStorage.removeItem('rat_token');
-          showLogin();
-          throw new Error('Authentication failed');
         } else {
           throw new Error('Failed to load stats');
         }
       } catch (error) {
-        if (error.message !== 'Authentication failed') {
-          showNotification('Error loading server statistics', 'error');
-        }
+        showNotification('Error loading server statistics', 'error');
         console.error('Stats error:', error);
       }
     }

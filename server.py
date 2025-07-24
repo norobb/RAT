@@ -115,18 +115,26 @@ async def get_login_page():
 
 @app.post("/login")
 async def login(request: Request):
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        logging.critical("ADMIN_USERNAME oder ADMIN_PASSWORD sind nicht gesetzt!")
+        raise HTTPException(status_code=500, detail="Server-Fehler: Admin-Konfiguration fehlt")
+
     client_ip = request.client.host if request.client else "unknown"
     if client_ip in BANNED_IPS:
         raise HTTPException(status_code=429, detail="IP ist gesperrt")
-    
+
     if FAILED_LOGIN_ATTEMPTS.get(client_ip, 0) >= 5:
         BANNED_IPS.add(client_ip)
         raise HTTPException(status_code=429, detail="Zu viele fehlgeschlagene Versuche")
 
     try:
         data = await request.json()
-        username, password = data.get("username"), data.get("password")
-        
+        username = data.get("username")
+        password = data.get("password")
+
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise HTTPException(status_code=400, detail="Benutzername und Passwort müssen als Zeichenketten gesendet werden.")
+
         if secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
             FAILED_LOGIN_ATTEMPTS.pop(client_ip, None)
             token = create_jwt_token(username)
@@ -136,8 +144,12 @@ async def login(request: Request):
             FAILED_LOGIN_ATTEMPTS[client_ip] = FAILED_LOGIN_ATTEMPTS.get(client_ip, 0) + 1
             logging.warning(f"Failed login attempt for '{username}' from {client_ip}")
             raise HTTPException(status_code=401, detail="Falsche Anmeldeinformationen")
-    except Exception:
-        raise HTTPException(status_code=500, detail="Server-Fehler beim Login")
+            
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Ungültiges JSON-Format")
+    except Exception as e:
+        logging.error(f"Unerwarteter Fehler beim Login: {e}")
+        raise HTTPException(status_code=500, detail="Ein interner Serverfehler ist aufgetreten.")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
