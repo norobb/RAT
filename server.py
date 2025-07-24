@@ -39,8 +39,8 @@ app.add_middleware(
 
 # --- Konfiguration ---
 security = HTTPBasic()
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 JWT_SECRET = os.getenv("JWT_SECRET", "e1a6addd5a87dca7d79d8a3c634be7e1")
 JWT_ALGO = "HS256"
 JWT_EXP_MINUTES = 120
