@@ -39,8 +39,8 @@ app.add_middleware(
 
 # --- Konfiguration ---
 security = HTTPBasic()
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecretpassword123")
 
 # --- Debugging-Start: Umgebungsvariablen prüfen ---
 logging.info(f"DEBUG: Lade Umgebungsvariablen...")
