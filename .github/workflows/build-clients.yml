@@ -49,9 +49,6 @@ jobs:
         run: |
           pyinstaller --noconsole --onefile ${{ matrix.pyinstaller_icon_arg }} client.py
 
-      - name: Create executables directory
-        run: mkdir -p executables # -p handles if it already exists
-
       - name: Move executable
         shell: bash
         run: |
