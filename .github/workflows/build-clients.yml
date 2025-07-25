@@ -73,9 +73,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create executables directory
-        run: mkdir -p executables
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
