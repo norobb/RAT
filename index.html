@@ -478,7 +478,8 @@
     function connectWebSocket() {
       const token = localStorage.getItem('rat_token');
       if (!token) {
-        window.location.href = '/login';
+        const errorMessage = encodeURIComponent('Kein Authentifizierungstoken gefunden. Bitte anmelden.');
+        window.location.href = `/login?error=${errorMessage}`;
         return;
       }
       
@@ -536,8 +537,8 @@
         if (event.code === 4401) {
           // Unauthorized - token expired or invalid
           localStorage.removeItem('rat_token');
-          window.location.href = '/login';
-          showNotification('Session expired or invalid. Please log in again.', 'warning');
+          const errorMessage = encodeURIComponent('Sitzung abgelaufen oder ungültig. Bitte erneut anmelden.');
+          window.location.href = `/login?error=${errorMessage}`;
         } else if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
           showNotification(`Connection lost. Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
@@ -1028,7 +1029,8 @@
     async function fetchWithAuth(url, options = {}) {
       const token = localStorage.getItem('rat_token');
       if (!token) {
-        window.location.href = '/login';
+        const errorMessage = encodeURIComponent('Kein Authentifizierungstoken gefunden. Bitte anmelden.');
+        window.location.href = `/login?error=${errorMessage}`;
         return;
       }
 
@@ -1041,7 +1043,8 @@
 
       if (response.status === 401) {
         localStorage.removeItem('rat_token');
-        window.location.href = '/login';
+        const errorMessage = encodeURIComponent('Sitzung abgelaufen oder ungültig. Bitte erneut anmelden.');
+        window.location.href = `/login?error=${errorMessage}`;
         return;
       }
 
@@ -1325,7 +1328,8 @@
         mainApp.classList.remove('hidden');
         connectWebSocket();
       } else {
-        window.location.href = '/login';
+        const errorMessage = encodeURIComponent('Bitte melden Sie sich an, um fortzufahren.');
+        window.location.href = `/login?error=${errorMessage}`;
       }
       
       // Auto-refresh client list every 30 seconds

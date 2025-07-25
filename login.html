@@ -55,6 +55,15 @@
     const loginForm = document.getElementById('login-form');
     const loginError = document.getElementById('login-error');
 
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
+      if (error) {
+        loginError.textContent = decodeURIComponent(error);
+        loginError.classList.remove('hidden');
+      }
+    });
+
     async function login(username, password) {
       try {
         const response = await fetch('/login', {
@@ -70,19 +79,19 @@
         if (response.ok && data.token) {
           localStorage.setItem('rat_token', data.token);
           window.location.href = '/';
-          return true;
         } else {
-          throw new Error(data.detail || 'Login failed');
+          const errorMessage = encodeURIComponent(data.detail || 'Login fehlgeschlagen');
+          window.location.href = `/login?error=${errorMessage}`;
         }
       } catch (error) {
-        loginError.textContent = error.message;
-        loginError.classList.remove('hidden');
-        return false;
+        const errorMessage = encodeURIComponent('Ein Netzwerkfehler ist aufgetreten.');
+        window.location.href = `/login?error=${errorMessage}`;
       }
     }
 
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      loginError.classList.add('hidden'); // Fehler vor dem Versuch ausblenden
       const username = document.getElementById('login-username').value;
       const password = document.getElementById('login-password').value;
       await login(username, password);
