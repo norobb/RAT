@@ -1,103 +1,112 @@
-name: Build Client Executable
+name: Build and Commit Client Executables
 
 on:
   push:
     branches: [main]
     paths:
       - 'client.py'
-      - 'requirements.txt' # Gut, auch auf Änderungen hier zu reagieren
-      - 'icon.ico'         # Und auf Änderungen am Icon
+      - 'requirements.txt'
+      - 'icon.ico'
 
 permissions:
   contents: write
+
 jobs:
-  build-client:
-    runs-on: windows-latest # Der Runner für Windows
+  build-clients:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            exe_name: client-windows.exe
+            artifact_name: client-executable-windows
+            pyinstaller_icon_arg: "--icon=icon.ico"
+          - os: ubuntu-latest
+            exe_name: client-linux
+            artifact_name: client-executable-linux
+            pyinstaller_icon_arg: "" # No icon for Linux
+          - os: macos-latest
+            exe_name: client-macos
+            artifact_name: client-executable-macos
+            pyinstaller_icon_arg: "" # PyInstaller on macOS needs .icns, skipping for now
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build client executable
+        run: |
+          pyinstaller --noconsole --onefile ${{ matrix.pyinstaller_icon_arg }} client.py
+
+      - name: Create executables directory
+        run: mkdir -p executables # -p handles if it already exists
+
+      - name: Move executable
+        shell: bash
+        run: |
+          SOURCE_FILE=$(ls dist/client* | head -n 1)
+          DEST_FILE="executables/${{ matrix.exe_name }}"
+          echo "Moving $SOURCE_FILE to $DEST_FILE"
+          mv "$SOURCE_FILE" "$DEST_FILE"
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: executables/${{ matrix.exe_name }}
+
+  commit-executables:
+    needs: build-clients
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Holt den gesamten Verlauf, wichtig für `git commit` später
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10' # Verwendet Python 3.10
-
-      - name: Ensure requirements.txt exists
-        shell: pwsh # PowerShell ist die Standard-Shell unter Windows, aber hier explizit gesetzt.
-        run: |
-          # Prüft, ob requirements.txt existiert. Wenn nicht, wird sie leer erstellt.
-          if (-Not (Test-Path requirements.txt)) {
-            New-Item -Path requirements.txt -ItemType File -Value ""
-          }
-
-      - name: Install build dependencies
-        run: pip install --upgrade pip wheel setuptools
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Build client executable
-        run: |
-          pip install pyinstaller
-          # Erstellt die client.exe mit oder ohne Icon.ico (falls das Icon fehlt/Fehler verursacht)
-          pyinstaller --noconsole --onefile --icon=icon.ico client.py || pyinstaller --noconsole --onefile client.py
+          fetch-depth: 0
 
       - name: Create executables directory
-        shell: pwsh
-        run: |
-          # Prüft, ob das 'executables'-Verzeichnis existiert. Wenn nicht, wird es erstellt.
-          if (-Not (Test-Path -PathType Container executables)) {
-            mkdir executables
-          }
+        run: mkdir -p executables
 
-      - name: Move executable to executables folder (Windows)
-        shell: pwsh
-        run: |
-          $sourcePath = "dist\client.exe"
-          $destinationDir = "executables"
-          $destinationFile = "$destinationDir\client-windows.exe"
-
-          # Entfernt die alte ausführbare Datei, falls sie existiert, um "file already exists" zu vermeiden.
-          if (Test-Path $destinationFile) {
-            Remove-Item $destinationFile -Force
-          }
-
-          # Verschiebt die neu erstellte ausführbare Datei an den Zielort.
-          Move-Item $sourcePath $destinationFile
-
-      - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: client-executable-windows
-          path: executables/* # Lädt alle Dateien im 'executables'-Ordner als Artefakt hoch
+          path: executables
+          merge-multiple: true # Merges all artifacts into the single 'executables' directory
 
-      - name: Commit and push executables to main branch
-        if: github.ref == 'refs/heads/main' # Führt diesen Schritt nur auf dem main-Branch aus
+      - name: List downloaded files
+        run: ls -lR executables
+
+      - name: Commit and push executables
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Benötigt den Standard-GitHub-Token für Schreibzugriff
-        shell: bash # Für Git-Befehle ist Bash oft einfacher und konsistenter
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
-          # Konfiguriert Git-Benutzerinformationen für den Commit
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Stellt sicher, dass das Remote für den Push korrekt ist und authentifiziert
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           
-          # Holt die neuesten Änderungen vom Main-Branch und checkout
-          git fetch origin main
-          git checkout main
+          # Pull latest changes from the branch to avoid conflicts
           git pull origin main
           
-          # Fügt alle Dateien im 'executables'-Verzeichnis zum Staging-Bereich hinzu
+          # Add all new/changed executables
           git add executables/*
           
-          # Erstellt einen Commit, wenn es Änderungen gibt, ansonsten macht es nichts.
-          # Das "||" bedeutet, dass der Commit nur ausgeführt wird, wenn der "git diff"-Befehl fehlschlägt (was bedeutet, dass es Änderungen gibt).
-          git diff --cached --quiet || git commit -m "Update executables [skip ci]"
-          
-          # Pusht die Änderungen zum Main-Branch
-          git push origin main
+          # Commit only if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "Update client executables for Windows, Linux, and macOS [skip ci]"
+            git push origin main
+          else
+            echo "No changes to commit."
+          fi
