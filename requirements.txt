@@ -11,6 +11,5 @@ opencv-python
 PyJWT
 bcrypt
 psutil
-ipaddress
 browserhistory
 pygetwindow

