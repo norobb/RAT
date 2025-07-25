@@ -41,6 +41,13 @@ app.add_middleware(
 security = HTTPBasic()
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+# --- Debugging-Start: Umgebungsvariablen prüfen ---
+logging.info(f"DEBUG: Lade Umgebungsvariablen...")
+logging.info(f"DEBUG: ADMIN_USERNAME geladen: {'Ja' if ADMIN_USERNAME else 'Nein'}")
+logging.info(f"DEBUG: ADMIN_PASSWORD geladen: {'Ja' if ADMIN_PASSWORD else 'Nein'}")
+# --- Debugging-Ende ---
+
 JWT_SECRET = os.getenv("JWT_SECRET", "e1a6addd5a87dca7d79d8a3c634be7e1")
 JWT_ALGO = "HS256"
 JWT_EXP_MINUTES = 120
