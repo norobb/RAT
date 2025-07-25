@@ -1,5 +1,2 @@
-client.exe
-build
-dist
-client.spec
-Agent.md
+# Created by venv; see https://docs.python.org/3/library/venv.html
+pyvenv.cfg
