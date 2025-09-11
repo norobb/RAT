@@ -52,6 +52,11 @@ def get_initial_info() -> dict:
         user = os.getlogin()
     except Exception:
         user = os.environ.get("USERNAME") or os.environ.get("USER") or "Unbekannt"
+    
+    try:
+        screen_width, screen_height = pyautogui.size()
+    except Exception:
+        screen_width, screen_height = 0, 0
         
     return {
         "type": "info",
@@ -63,6 +68,7 @@ def get_initial_info() -> dict:
             "architecture": platform.machine(),
             "python_version": platform.python_version(),
             "cwd": os.getcwd(),
+            "screen": {"width": screen_width, "height": screen_height}
         }
     }
 
@@ -552,65 +558,77 @@ class WebcamStreamer:
         self._ws = None
         self._cap = None
 
-    async def start(self, ws, cam_index=0):
-        if self._running: return
+    async def start(self, ws, cam_index=0, resolution=None):
+        if self._running:
+            await ws.send(json.dumps({"type": "command_output", "output": "Webcam-Stream läuft bereits."}))
+            return
         
         try:
-            # Dynamischer Import von OpenCV
             global cv2
             import cv2
         except ImportError:
             logging.error("OpenCV ist nicht installiert. Webcam-Funktion ist deaktiviert.")
-            await ws.send(json.dumps({"type": "command_output", "output": "Fehler: OpenCV nicht auf dem Client installiert."}))
+            await ws.send(json.dumps({"type": "command_output", "output": "Fehler: OpenCV ist auf dem Client nicht installiert."}))
             return
 
         self._running = True
         self._ws = ws
-        self._task = asyncio.create_task(self._stream(cam_index))
-        logging.info(f"Webcam-Streaming von Kamera {cam_index} gestartet.")
+        self._task = asyncio.create_task(self._stream(cam_index, resolution))
+        logging.info(f"Webcam-Streaming von Kamera {cam_index} wird gestartet.")
 
     async def stop(self):
         self._running = False
         if self._task:
             self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
             self._task = None
         if self._cap:
             self._cap.release()
             self._cap = None
         logging.info("Webcam-Streaming gestoppt.")
 
-    async def _stream(self, cam_index):
-        self._cap = cv2.VideoCapture(cam_index)
-        if not self._cap.isOpened():
-            logging.error(f"Konnte Webcam {cam_index} nicht öffnen.")
-            await self._ws.send(json.dumps({"type": "command_output", "output": f"Fehler: Webcam {cam_index} konnte nicht geöffnet werden."}))
-            self._running = False
-            return
+    async def _stream(self, cam_index, resolution):
+        try:
+            self._cap = cv2.VideoCapture(cam_index)
+            if not self._cap.isOpened():
+                raise IOError(f"Kamera {cam_index} nicht gefunden oder Zugriff verweigert.")
 
-        while self._running:
-            try:
+            if resolution:
+                width, height = resolution
+                self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                actual_width = self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+                actual_height = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+                logging.info(f"Versuche Auflösung {width}x{height}, erhalten: {actual_width}x{actual_height}")
+                await self._ws.send(json.dumps({"type": "command_output", "output": f"Stream gestartet mit Auflösung: {actual_width}x{actual_height}"}))
+
+            while self._running:
                 ret, frame = self._cap.read()
-                if not ret: break
+                if not ret:
+                    logging.warning(f"Frame von Kamera {cam_index} konnte nicht gelesen werden. Stream wird beendet.")
+                    await self._ws.send(json.dumps({"type": "command_output", "output": f"Fehler: Kamera {cam_index} hat die Verbindung verloren."}))
+                    break
 
-                # Bild für die Übertragung optimieren
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(frame_rgb)
-                img.thumbnail((640, 480), Image.LANCZOS)
-                
-                buf = io.BytesIO()
-                img.save(buf, format='JPEG', quality=70)
-                img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                img_base64 = base64.b64encode(buffer).decode('utf-8')
                 
                 await self._ws.send(json.dumps({"type": "webcam_frame", "data": img_base64}))
                 await asyncio.sleep(0.05) # ~20 FPS
-            except (websockets.ConnectionClosed, asyncio.CancelledError):
-                break
-            except Exception as e:
-                logging.error(f"Fehler im Webcam-Stream: {e}")
-                break
-        
-        if self._cap: self._cap.release()
-        logging.info("Webcam-Stream-Schleife beendet.")
+
+        except (IOError, ImportError, Exception) as e:
+            logging.error(f"Fehler im Webcam-Stream: {e}")
+            try:
+                await self._ws.send(json.dumps({"type": "command_output", "output": f"Fehler beim Starten des Webcam-Streams: {e}"}))
+            except websockets.ConnectionClosed:
+                pass # Verbindung möglicherweise bereits geschlossen
+        finally:
+            if self._cap:
+                self._cap.release()
+            self._running = False
+            logging.info("Webcam-Stream-Schleife beendet.")
 
 webcam_streamer = WebcamStreamer()
 
@@ -730,12 +748,44 @@ async def process_commands(websocket: websockets.ClientConnection):
                 await screen_streamer.stop()
                 output = "Screen-Streaming gestoppt."
             elif action == "webcam_start":
-                cam_index = int(command.get("index", 0))
-                await webcam_streamer.start(websocket, cam_index)
-                output = f"Webcam-Streaming wird von Kamera {cam_index} gestartet..."
+                args = command.get("args", [])
+                cam_index = int(args[0]) if args else 0
+                resolution = None
+                if len(args) > 1:
+                    try:
+                        width, height = map(int, args[1].lower().split('x'))
+                        resolution = (width, height)
+                    except ValueError:
+                        output = "Fehler: Ungültiges Auflösungsformat. Erwartet: 1280x720"
+                
+                if not output:
+                    await webcam_streamer.start(websocket, cam_index, resolution)
+                    output = f"Webcam-Streaming wird von Kamera {cam_index} gestartet..."
             elif action == "webcam_stop":
                 await webcam_streamer.stop()
                 output = "Webcam-Streaming gestoppt."
+            elif action == "mouse":
+                event_data = command.get("data", {})
+                event_type = event_data.get("type")
+                if event_type == "move":
+                    pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
+                elif event_type == "click":
+                    pyautogui.click(
+                        button=event_data.get("button", "left"),
+                        clicks=event_data.get("clicks", 1)
+                    )
+                elif event_type == "scroll":
+                    pyautogui.scroll(event_data.get("delta_y", 0))
+                # No output for mouse events to reduce latency
+            elif action == "keyboard":
+                event_data = command.get("data", {})
+                key = event_data.get("key")
+                if key:
+                    if event_data.get("down", True):
+                        pyautogui.keyDown(key)
+                    else:
+                        pyautogui.keyUp(key)
+                # No output for keyboard events
             else: output = f"Unbekannte Aktion: {action}"
 
             if output: response["output"] = output
