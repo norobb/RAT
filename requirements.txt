@@ -1,10 +1,10 @@
+
 cryptography
 fastapi
 mss
 pillow
 pynput
 pyautogui
-requests
 uvicorn
 websockets
 opencv-python
@@ -12,4 +12,8 @@ PyJWT
 bcrypt
 psutil
 browserhistory
-pygetwindow
+pytest
+pytest-asyncio
+anyio
+# for local development
+python-dotenv

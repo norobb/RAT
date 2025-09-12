@@ -1,13 +1,6 @@
 @echo off
 setlocal
 
-:: =============================================================================
-:: Gemini-Optimized Build Script for RAT Client
-::
-:: This script compiles the client.py using PyInstaller with best practices.
-:: It ensures a clean, one-file executable and handles cleanup.
-:: =============================================================================
-
 echo [INFO] Starting RAT Client build process...
 
 :: --- Configuration ---
@@ -17,8 +10,8 @@ set "DIST_PATH=executables"
 set "BUILD_PATH=build_temp"
 
 :: --- Validation ---
-if not exist "%PYTHON_SCRIPT%" (
-    echo [ERROR] Main script not found: %PYTHON_SCRIPT%
+if not exist "client.py" (
+    echo [ERROR] Main script not found: client.py
     goto :error
 )
 if not exist "%ICON_FILE%" (
@@ -30,7 +23,7 @@ if not exist "%ICON_FILE%" (
 
 :: --- Build ---
 echo [INFO] Running PyInstaller...
-pyinstaller --noconsole --onefile --name "%EXE_NAME%" %ICON_OPTION% --distpath "%DIST_PATH%" --workpath "%BUILD_PATH%" --clean "%PYTHON_SCRIPT%"
+pyinstaller --noconsole --onefile --name "%EXE_NAME%" %ICON_OPTION% --distpath "%DIST_PATH%" --workpath "%BUILD_PATH%" --clean "client.py"
 
 if %errorlevel% neq 0 (
     echo [ERROR] PyInstaller failed with error code %errorlevel%.

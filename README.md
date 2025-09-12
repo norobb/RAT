@@ -1,126 +1,121 @@
-# RAT Control Panel
+# RAT (Remote Administration Tool)
 
-Dieses Projekt ist ein Remote Administration Tool (RAT) für Forschungs- und Testzwecke.
+This project is a cross-platform Remote Administration Tool (RAT) written in Python, featuring a web-based control panel and a modular client.
 
 ## Features
 
-- Multi-Client Verwaltung (gleichzeitige Steuerung mehrerer Clients)
-- Discord-ähnliche Slash-Befehle mit Autovervollständigung
-- Live-Screen-Streaming (VNC-ähnlich)
-- Dateiübertragung (Download/Upload)
-- Keylogger (sofern möglich)
-- Systeminformationen und Browserverlauf
-- Verzeichnisnavigation (`ls`, `cd`)
-- Verschlüsselung/Entschlüsselung von Dateien/Verzeichnissen (`encrypt`, `decrypt`)
-- Sicheres Web-UI mit Authentifizierung (Basic Auth)
-- Kompatibel mit Windows, Linux und macOS (Client & Server)
-- Persistenz auf Windows (Autostart)
-- Benachrichtigung bei neuer Verbindung (ntfy.sh)
-- Debug-Panel für Fehleranalyse im Web-UI
+- **Web-based Control Panel:** A modern, responsive web interface for managing clients.
+- **Cross-Platform Client:** The client is designed to run on Windows, macOS, and Linux.
+- **Modular Architecture:** The client's functionality is broken down into modules, making it easy to extend.
+- **Real-time Communication:** Uses WebSockets for low-latency communication between the server and clients.
+- **Core Features:**
+  - Interactive Shell
+  - Screen Streaming
+  - Webcam Streaming
+  - File Manager (list, upload, download, remove, mkdir)
+  - Process Manager (list, kill)
+  - System Information
+  - Keylogger
+  - Persistence
 
-## Unterstützte Slash-Befehle
+## Project Structure
 
-| Befehl                | Beschreibung                                         |
-|-----------------------|------------------------------------------------------|
-| `/help`               | Zeigt die Hilfe an                                   |
-| `/exec`               | Führe einen Shell-Befehl aus                         |
-| `/screenshot`         | Screenshot des Bildschirms                           |
-| `/download`           | Datei herunterladen (Pfad angeben)                   |
-| `/upload`             | Datei zum Client hochladen                           |
-| `/history`            | Browserverlauf anzeigen                              |
-| `/keylogger`          | Keylogger-Log anzeigen                               |
-| `/ls`                 | Verzeichnis auflisten                                |
-| `/cd`                 | Verzeichnis wechseln                                 |
-| `/encrypt`            | Verzeichnis rekursiv verschlüsseln                   |
-| `/decrypt`            | Verzeichnis rekursiv entschlüsseln (Pfad und Schlüssel)|
-| `/systeminfo`         | Systeminformationen anzeigen                         |
-| `/shutdown`           | Client herunterfahren                                |
-| `/restart`            | Client neustarten                                    |
-| `/screenstream_start` | Live-Screen starten                                  |
-| `/screenstream_stop`  | Live-Screen stoppen                                  |
-| `/scan_cameras`       | Suche nach Netzwerk-Kameras im LAN                   |
-| `/webcam_start`       | Live-Webcam-Stream starten                           |
-| `/webcam_stop`        | Live-Webcam-Stream stoppen                           |
+```
+.
+├── modules/         # Client-side modules
+├── tests/           # Unit and integration tests
+├── .dockerignore      # Files to ignore in Docker builds
+├── .env             # Environment variables (local)
+├── client.py        # Main client application
+├── Dockerfile       # Dockerfile for the server
+├── Dockerfile.client # Dockerfile for the client
+├── Dockerfile.test  # Dockerfile for running tests
+├── docker-compose.yml # Docker Compose for local development
+├── README.md        # This file
+├── requirements.txt # Python dependencies
+├── run_local.py     # Script to run the server locally
+└── server.py        # Main server application
+```
 
-**Beispiel für Verschlüsselung/Entschlüsselung:**
-- `/encrypt C:\Users\test\Documents`
-- `/decrypt C:\Users\test\Documents 0123456789abcdef...`
+## Getting Started
 
-## Installation
+### Prerequisites
 
-1. **Python 3.10+ installieren**
-2. **Abhängigkeiten installieren:**
-   ```
-   pip install -r requirements.txt
-   ```
-3. **Server starten:**
-   ```
-   python server.py
-   ```
-4. **Client kompilieren:**
-   ```
-   ./compile.bat
-   ```
-   oder manuell mit PyInstaller:
-   ```
-   pyinstaller --noconsole --onefile client.py
-   ```
+- Python 3.10+
+- Docker and Docker Compose (for containerized setup)
 
-## Systemvoraussetzungen
+### Local Development
 
-- **Server:** Python 3.10+, FastAPI, Uvicorn, websockets, cryptography, etc.
-- **Client:** Python 3.10+, mss, pillow, pynput, pyautogui, cryptography, websockets, etc.
-- **Web-UI:** Moderne Browser (Chrome, Firefox, Edge, Safari)
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd <repository-name>
+    ```
 
-## Hinweise
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-- **Nur für legale und ethische Zwecke verwenden!**
-- Standard-Login für das Web-UI: Nutzername `admin`, Passwort `supersecretpassword123`
-- Diese Zugangsdaten können über die Umgebungsvariablen `ADMIN_USERNAME` und `ADMIN_PASSWORD` gesetzt werden.
-- Die kompilierten Executables werden nach jedem Build automatisch im Ordner `executables/` im Repository gespeichert (siehe GitHub Actions Workflow).
-- Persistenz (Autostart) ist nur auf Windows implementiert.
-- Die Keylogger-Funktion benötigt das Modul `pynput` und funktioniert ggf. nicht in allen Umgebungen.
-- Für Browserverlauf werden Chrome, Edge und Firefox unterstützt (je nach OS).
-- Die Kommunikation erfolgt verschlüsselt über WebSockets (wss).
+3.  **Run the server:**
+    ```bash
+    python run_local.py
+    ```
+    The server will be running at `http://127.0.0.1:8000`.
 
-## Troubleshooting
+4.  **Run the client:**
+    In a separate terminal, run the client with the `--local` flag:
+    ```bash
+    python client.py --local
+    ```
 
-- **Fehler beim Starten:** Prüfe, ob alle Abhängigkeiten installiert sind (`pip install -r requirements.txt`).
-- **Submodul-Fehler:**  
-  Das Projekt verwendet keine Submodule. Die Datei `.gitmodules` kann gelöscht werden, oder der Befehl kann ignoriert werden.  
-  Falls das Problem weiterhin besteht, führe Folgendes aus:
-  ```sh
-  git submodule deinit -f .
-  git rm --cached RAT
-  rm -f .gitmodules
-  ```
-- **Web-UI nicht erreichbar:** Stelle sicher, dass der Server läuft und der Port (Standard: 8000) offen ist.
-- **Client verbindet nicht:** Prüfe die SERVER_URI in `client.py` und die Netzwerkverbindung.
+### Docker Development
 
-## Sicherheit
+1.  **Create a `.env` file:**
+    Copy the contents of the provided `.env` file and replace the placeholder values with your own secrets.
 
-- **Niemals für illegale Zwecke verwenden!**
-- Der Code ist zu Forschungs- und Testzwecken gedacht.
-- Setze sichere Passwörter für das Web-UI.
-- Der Entwickler übernimmt keine Haftung für Schäden oder Missbrauch.
+2.  **Build and run with Docker Compose:**
+    ```bash
+    docker compose up --build
+    ```
+    This will build and start the server and a client container. The server will be accessible at `http://127.0.0.1:8000`.
 
-## Entwicklung
+## Running Tests
 
-- **Frontend:** HTML, Vanilla JS (siehe `index.html`)
-- **Backend:** FastAPI (siehe `server.py`)
-- **Client:** Python (siehe `client.py`)
-- **Build:** Siehe GitHub Actions Workflow `.github/workflows/build-clients.yml`
+### Locally
 
-## Lizenz
+To run the tests directly on your machine, make sure you have installed the dependencies from `requirements.txt` and then run:
 
-MIT License – siehe [LICENSE](LICENSE)
+```bash
+python -m pytest
+```
 
----
+### With Docker
 
-### Kontakt
+To run the tests in a containerized environment, use the `test` service defined in `docker-compose.yml`:
 
-Für Fragen oder Beiträge:  
-- GitHub Issues  
-- Maintainer: NM und JK
+```bash
+docker compose run --rm test
+```
 
----
+## Deployment to Koyeb
+
+This application is designed to be easily deployed to platforms like Koyeb.
+
+1.  **Push your code to a GitHub repository.**
+
+2.  **Create a new App on Koyeb:**
+    - Choose GitHub as the deployment method and select your repository.
+    - Koyeb should automatically detect the `Dockerfile` and configure the build.
+
+3.  **Configure Environment Variables:**
+    In the Koyeb service configuration, set the following environment variables:
+    - `ADMIN_USERNAME`: Your desired admin username.
+    - `ADMIN_PASSWORD`: A strong and secret password.
+    - `JWT_SECRET`: A long, random, and secret key for signing JWTs.
+
+4.  **Deploy:**
+    Koyeb will build and deploy your application. The server will be available at the public URL provided by Koyeb.
+
+5.  **Client Configuration:**
+    To connect a client to your deployed server, you need to set the `SERVER_URI` environment variable on the client machine to your Koyeb WebSocket URL (e.g., `wss://<your-app-name>-<your-org>.koyeb.app/rat`).

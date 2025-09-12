@@ -1,0 +1,33 @@
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.spec
+build_temp/
+executables/
+
+# Other
+.vscode/
+README.md
+AGENT.md
+LICENSE
+Procfile
+compile.bat
+start.sh

