@@ -119,7 +119,8 @@ def create_jwt_token(username: str) -> str:
 
 def verify_jwt_token(token: str) -> str | None:
     try:
-        payload = jwt.decode(token, config.jwt_secret, algorithms=[config.jwt_algo])
+        # Hinzufügen eines leeway-Parameters, um kleine Zeitabweichungen zu tolerieren
+        payload = jwt.decode(token, config.jwt_secret, algorithms=[config.jwt_algo], leeway=30)
         return payload.get("sub")
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
         logging.warning(f"JWT verification failed: {e}")
