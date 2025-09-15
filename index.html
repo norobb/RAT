@@ -921,7 +921,6 @@
     }
 
     function attachLiveControlEvents() {
-        DOM.liveControlImage.addEventListener('mousemove', handleMouseMove);
         DOM.liveControlImage.addEventListener('mousedown', handleMouseDown);
         DOM.liveControlImage.addEventListener('mouseup', handleMouseUp);
         DOM.liveControlImage.addEventListener('wheel', handleMouseWheel);
@@ -931,7 +930,6 @@
     }
 
     function detachLiveControlEvents() {
-        DOM.liveControlImage.removeEventListener('mousemove', handleMouseMove);
         DOM.liveControlImage.removeEventListener('mousedown', handleMouseDown);
         DOM.liveControlImage.removeEventListener('mouseup', handleMouseUp);
         DOM.liveControlImage.removeEventListener('wheel', handleMouseWheel);
@@ -962,10 +960,11 @@
     function handleMouseDown(e) {
         e.preventDefault();
         const buttonMap = { 0: 'left', 1: 'middle', 2: 'right' };
+        const { x, y } = getScaledCoords(e);
         ws.send(JSON.stringify({
             action: 'mouse',
             target_ids: [controlledClientId],
-            data: { type: 'click', button: buttonMap[e.button], clicks: 1 }
+            data: { type: 'click', button: buttonMap[e.button], clicks: 1, x, y }
         }));
     }
 

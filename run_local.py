@@ -20,7 +20,7 @@ def main():
         "uvicorn",
         "server:app",
         "--host",
-        "127.0.0.1",
+        "0.0.0.0",
         "--port",
         "8000",
         "--reload"
@@ -40,18 +40,18 @@ def main():
     client_command = [sys.executable, "client.py"]
 
     # Start the client in a background process
-    client_process = subprocess.Popen(client_command, env=client_env)
+    #client_process = subprocess.Popen(client_command, env=client_env)
 
     try:
         # Wait for the server to exit
         server_process.wait()
     except KeyboardInterrupt:
-        print("\nStopping server and client...")
+        print("\nStopping server...")
         server_process.terminate()
-        client_process.terminate()
+        #client_process.terminate()
         server_process.wait()
-        client_process.wait()
-        print("Server and client stopped.")
+        #lient_process.wait()
+        print("Server stopped.")
 
 if __name__ == "__main__":
     main()

