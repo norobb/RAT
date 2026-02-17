@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-6 \
     libxtst6 \
     libxi6 \
+    libxext6 \
+    libxrender1 \
+    libice6 \
+    libsm6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
