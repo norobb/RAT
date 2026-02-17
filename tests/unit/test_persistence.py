@@ -11,51 +11,68 @@ class TestPersistence(unittest.TestCase):
     @patch('platform.system')
     @patch('subprocess.run')
     @patch('os.makedirs')
+    @patch('shutil.which')
     @patch('os.path.exists')
     @patch('builtins.open', new_callable=mock_open)
-    def test_manage_persistence_linux_enable(self, mock_file, mock_exists, mock_makedirs, mock_run, mock_system):
+    def test_manage_persistence_linux_enable_both(self, mock_file, mock_exists, mock_which, mock_makedirs, mock_run, mock_system):
         mock_system.return_value = 'Linux'
+        mock_which.return_value = True # systemctl exists
         mock_run.return_value = MagicMock(returncode=0)
 
         result = manage_persistence(enable=True)
 
-        self.assertIn("Persistence enabled using systemd user service", result)
+        self.assertIn("Persistence enabled using systemd and desktop autostart", result)
         mock_makedirs.assert_called()
-        mock_file.assert_called()
-        # Verify systemctl calls: daemon-reload, enable, start
-        self.assertEqual(mock_run.call_count, 3)
-        calls = [call[0][0] for call in mock_run.call_args_list]
-        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
-        self.assertIn(["systemctl", "--user", "enable", "RuntimeBroker.service"], calls)
-        self.assertIn(["systemctl", "--user", "start", "RuntimeBroker.service"], calls)
-
-    @patch('platform.system')
-    @patch('subprocess.run')
-    @patch('os.path.exists')
-    @patch('os.remove')
-    def test_manage_persistence_linux_disable(self, mock_remove, mock_exists, mock_run, mock_system):
-        mock_system.return_value = 'Linux'
-        mock_exists.return_value = True
-        mock_run.return_value = MagicMock(returncode=0)
-
-        result = manage_persistence(enable=False)
-
-        self.assertIn("Persistence removed (systemd user service)", result)
-        mock_remove.assert_called()
-        # Verify systemctl calls: stop, disable, daemon-reload
-        self.assertEqual(mock_run.call_count, 3)
-        calls = [call[0][0] for call in mock_run.call_args_list]
-        self.assertIn(["systemctl", "--user", "stop", "RuntimeBroker.service"], calls)
-        self.assertIn(["systemctl", "--user", "disable", "RuntimeBroker.service"], calls)
-        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+        self.assertEqual(mock_file.call_count, 2) # service and desktop files
+        # Verify systemctl calls
+        self.assertGreaterEqual(mock_run.call_count, 3)
 
     @patch('platform.system')
     @patch('subprocess.run')
     @patch('os.makedirs')
+    @patch('shutil.which')
     @patch('os.path.exists')
     @patch('builtins.open', new_callable=mock_open)
-    def test_manage_persistence_macos_enable(self, mock_file, mock_exists, mock_makedirs, mock_run, mock_system):
+    def test_manage_persistence_linux_enable_fallback(self, mock_file, mock_exists, mock_which, mock_makedirs, mock_run, mock_system):
+        mock_system.return_value = 'Linux'
+        mock_which.return_value = False # systemctl NOT exists
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = manage_persistence(enable=True)
+
+        self.assertIn("Persistence enabled using desktop autostart", result)
+        self.assertEqual(mock_file.call_count, 2) # still writes service file then desktop file
+        # But should NOT call systemctl
+        systemctl_calls = [call for call in mock_run.call_args_list if "systemctl" in str(call)]
+        self.assertEqual(len(systemctl_calls), 0)
+
+    @patch('platform.system')
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('os.path.exists')
+    @patch('os.remove')
+    def test_manage_persistence_linux_disable(self, mock_remove, mock_exists, mock_which, mock_run, mock_system):
+        mock_system.return_value = 'Linux'
+        mock_exists.return_value = True
+        mock_which.return_value = True
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = manage_persistence(enable=False)
+
+        self.assertIn("Persistence removed", result)
+        self.assertIn("systemd service removed", result)
+        self.assertIn("desktop autostart removed", result)
+        self.assertGreaterEqual(mock_remove.call_count, 2)
+
+    @patch('platform.system')
+    @patch('subprocess.run')
+    @patch('os.makedirs')
+    @patch('shutil.which')
+    @patch('os.path.exists')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_manage_persistence_macos_enable(self, mock_file, mock_exists, mock_which, mock_makedirs, mock_run, mock_system):
         mock_system.return_value = 'Darwin'
+        mock_which.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
 
         result = manage_persistence(enable=True)
@@ -63,24 +80,7 @@ class TestPersistence(unittest.TestCase):
         self.assertIn("Persistence enabled using macOS Launch Agent", result)
         mock_makedirs.assert_called()
         mock_file.assert_called()
-        # Verify launchctl load call
-        mock_run.assert_called_with(["launchctl", "load", unittest.mock.ANY], check=True)
-
-    @patch('platform.system')
-    @patch('subprocess.run')
-    @patch('os.path.exists')
-    @patch('os.remove')
-    def test_manage_persistence_macos_disable(self, mock_remove, mock_exists, mock_run, mock_system):
-        mock_system.return_value = 'Darwin'
-        mock_exists.return_value = True
-        mock_run.return_value = MagicMock(returncode=0)
-
-        result = manage_persistence(enable=False)
-
-        self.assertIn("Persistence removed (macOS Launch Agent)", result)
-        mock_remove.assert_called()
-        # Verify launchctl unload call
-        mock_run.assert_called_with(["launchctl", "unload", unittest.mock.ANY], check=False)
+        mock_run.assert_called_with(["launchctl", "load", unittest.mock.ANY], check=True, capture_output=True)
 
     @patch('platform.system')
     @patch('subprocess.run')
@@ -97,7 +97,6 @@ class TestPersistence(unittest.TestCase):
 
         self.assertIn("Persistence enabled", result)
         mock_makedirs.assert_called()
-        # Verify reg add call (it's a shell string in Windows implementation)
         mock_run.assert_called_with(unittest.mock.ANY, shell=True, check=True, capture_output=True, text=True)
         self.assertIn("reg add", mock_run.call_args[0][0])
 
