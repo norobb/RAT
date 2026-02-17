@@ -1,21 +1,28 @@
-
 # --- Stage 1: Build / Dependencies ---
-FROM python:3.10-slim as builder
+FROM python:3.10 AS builder
 
-WORKDIR /app
-
-# Create a non-root user
+# Create a non-root user for building
 RUN useradd --create-home appuser
+USER appuser
 WORKDIR /home/appuser
 
 # Copy only requirements to leverage Docker cache
 COPY requirements.txt .
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies to the user's local directory
+RUN pip install --user --no-cache-dir -r requirements.txt
 
 # --- Stage 2: Final Image ---
-FROM python:3.10-slim as final
+FROM python:3.10-slim AS final
+
+# Install runtime dependencies for OpenCV, X11, and other modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libx11-6 \
+    libxtst6 \
+    libxi6 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create and switch to a non-root user
 RUN useradd --create-home appuser
