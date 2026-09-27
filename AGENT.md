@@ -8,7 +8,7 @@
 
 ## Architecture
 - **FastAPI Backend (`server.py`):** Manages WebSocket connections from both the web UI and RAT clients. Uses JWT for secure UI authentication and features a robust, asynchronous architecture. Handles command forwarding and client state management.
-- **Python Client (`client.py`):** Connects to the server via WebSocket, registers itself by sending a structured JSON `info` message, and then awaits commands. Includes modules for screen streaming (base64), file operations, and system information gathering. Features persistence on Windows and a keylogger.
+- **Python Client (`client.py`):** Connects to the server via WebSocket, registers itself by sending a structured JSON `info` message, and then awaits commands. Includes modules for screen streaming (base64), file operations, and system information gathering. Features cross-platform persistence (Windows, macOS, Linux) and a keylogger.
 - **Web UI (`index.html`):** A responsive, single-page application built with Tailwind CSS and vanilla JavaScript. Provides a full control panel for interacting with connected clients, viewing live media streams, and monitoring server status. It is optimized for both desktop and mobile use.
 - **Authentication:** JWT for the web UI, ensuring that only authenticated users can connect to the WebSocket and access the control panel. Includes brute-force protection.
 

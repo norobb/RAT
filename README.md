@@ -16,7 +16,7 @@ This project is a cross-platform Remote Administration Tool (RAT) written in Pyt
   - Process Manager (list, kill)
   - System Information
   - Keylogger
-  - Persistence
+  - Persistence (Windows, macOS, Linux)
 
 ## Project Structure
 
